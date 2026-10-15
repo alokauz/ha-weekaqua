@@ -41,22 +41,34 @@ jobs:
         run: |
           version=$(python3 -c "import json; print(json.load(open('custom_components/weekaqua/manifest.json'))['version'])")
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Version in manifest.json: $version"
       - name: Create release if this version is new
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          REPO: ${{ github.repository }}
         run: |
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "$TAG already released - nothing to do (bump the version in manifest.json to release)."
             exit 0
           fi
+          # Release notes: this version's section of CHANGELOG.md + full changelog link
+          python3 .github/release_notes.py "$VERSION" > notes.md
+          prev=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)
+          if [ -n "$prev" ]; then
+            printf '\n\n**Full changelog**: https://github.com/%s/compare/%s...%s\n' "$REPO" "$prev" "$TAG" >> notes.md
+          else
+            printf '\n\n**Full changelog**: https://github.com/%s/commits/%s\n' "$REPO" "$TAG" >> notes.md
+          fi
+          cat notes.md
           # Versions like 0.9.1b1 / 0.9.1a1 / 0.9.1rc1 are betas: published as
           # pre-releases, which HACS only offers with "Show beta versions".
           if echo "$TAG" | grep -Eq '(a|b|rc)[0-9]+$'; then
-            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG (beta)" --generate-notes --prerelease
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG (beta)" --notes-file notes.md --prerelease
             echo "Released $TAG as a pre-release (beta)"
           else
-            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
             echo "Released $TAG"
           fi

@@ -1,0 +1,37 @@
+# Changelog
+
+Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
+
+## 0.9.1b5
+
+- New integration icon: an aquarium with the light bar on its rim, shining its red, green, blue and UV channels onto a plant (Home Assistant 2026.3 or newer). The HACS list doesn't show integration icons of this kind yet.
+
+## 0.9.1b4
+
+- First integration icon: the light bar with its four channels shining into the water.
+
+## 0.9.1b3
+
+- **Current step** and **Next step** show what a step does with their icon: sunrise (on after off), palette (colour change while on) or sunset (off).
+- New `kind` attribute on both sensors (`sunrise`, `change` or `sunset`) for automations.
+
+## 0.9.1b2
+
+- **All steps** sensor is easier to read: `15:00 · On · Chat GPT | 21:00 · Off`.
+
+## 0.9.1b1
+
+- **Medium** is now the default fade smoothness (at most one command every 10 s). A smoothness you chose yourself is kept.
+- Schedule step descriptions show **On** for steps that turn the light on, like **Off** for the others: `15:00 · On · Chat GPT 100% · fade 60 min · every day`.
+
+## 0.9.0
+
+First public release.
+
+- Light with brightness and colour (R, G, B and UV as the white channel), the app's 12 presets as effects, and smooth fades (`transition`).
+- Sliders for each channel and the fan, a preset picker with your own presets on top.
+- Your own presets with name, channels and fan speed.
+- Built-in schedule: fade to a preset or off at set times on chosen days, with per-step fade curve and smoothness, retries when the light can't be reached, and catch-up after a restart.
+- Natural (perceptual) fade curve and adjustable fade smoothness.
+- Power limit like the app (total power at most 100 %), with a **Power** sensor.
+- Sensors for the schedule: **All steps**, **Current step**, **Next step**.
