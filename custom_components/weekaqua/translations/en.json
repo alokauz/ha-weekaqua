@@ -1,0 +1,161 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "description": "Choose the Week Aqua light to add. Close the WEEK AQUA phone app first.",
+        "data": {
+          "address": "Light"
+        }
+      },
+      "bluetooth_confirm": {
+        "description": "Add {name}? Close the WEEK AQUA phone app first."
+      }
+    },
+    "abort": {
+      "already_configured": "This light is already configured.",
+      "no_devices_found": "No Week Aqua lights found. Make sure the light is powered and the phone app is closed."
+    }
+  },
+  "entity": {
+    "number": {
+      "fan": {
+        "name": "5. Fan"
+      },
+      "channel_red": {
+        "name": "1. R"
+      },
+      "channel_green": {
+        "name": "2. G"
+      },
+      "channel_blue": {
+        "name": "3. B"
+      },
+      "channel_uv": {
+        "name": "4. UV"
+      }
+    },
+    "button": {
+      "sync_clock": {
+        "name": "Sync clock"
+      },
+      "simple_schedule": {
+        "name": "Resume simple schedule"
+      },
+      "advanced_schedule": {
+        "name": "Resume advanced schedule"
+      }
+    },
+    "select": {
+      "preset": {
+        "name": "Preset"
+      }
+    },
+    "switch": {
+      "schedule": {
+        "name": "Schedule"
+      }
+    },
+    "sensor": {
+      "next_step": {
+        "name": "Next step"
+      },
+      "current_step": {
+        "name": "Current step"
+      },
+      "schedule_steps": {
+        "name": "All steps"
+      },
+      "power": {
+        "name": "Power"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Week Aqua settings",
+        "menu_options": {
+          "add_preset": "Add or update a preset",
+          "remove_preset": "Remove presets",
+          "add_schedule": "Add or update a schedule step",
+          "remove_schedule": "Remove schedule steps",
+          "display": "Slider or number input",
+          "fade": "Fade smoothness and curve",
+          "power": "Power limit"
+        }
+      },
+      "add_preset": {
+        "title": "Add or update a preset",
+        "description": "The values start at what the light is showing now. Using the name of one of your presets updates it. Leave Fan empty to keep the fan unchanged when the preset is used. Total power must stay at or below 100 % (the values shown now: {power} %).",
+        "data": {
+          "name": "Name",
+          "red": "1. R",
+          "green": "2. G",
+          "blue": "3. B",
+          "uv": "4. UV",
+          "fan": "5. Fan"
+        }
+      },
+      "remove_preset": {
+        "title": "Remove presets",
+        "data": {
+          "remove": "Presets to remove"
+        }
+      },
+      "add_schedule": {
+        "title": "Add or update a schedule step",
+        "description": "At this time the light fades to the chosen preset (or off). Saving a step at a time that already exists replaces it.\n\nCurrent schedule:\n{steps}",
+        "data": {
+          "time": "Time",
+          "target": "Preset",
+          "brightness": "Brightness",
+          "fade": "Fade duration",
+          "days": "Days",
+          "curve": "Fade curve",
+          "smoothness": "Fade smoothness"
+        },
+        "data_description": {
+          "brightness": "Ignored for Off.",
+          "fade": "0 = switch instantly.",
+          "curve": "Only used when the step fades.",
+          "smoothness": "Only used when the step fades."
+        }
+      },
+      "remove_schedule": {
+        "title": "Remove schedule steps",
+        "data": {
+          "remove": "Steps to remove"
+        }
+      },
+      "display": {
+        "title": "Slider or number input",
+        "description": "How the 1. R – 5. Fan controls appear on the device page.",
+        "data": {
+          "input_mode": "Input style"
+        }
+      },
+      "fade": {
+        "title": "Fade smoothness and curve",
+        "description": "Smoothness sets how often the light gets a new level during a fade: Fine sends a command for every level step (smoothest, most commands); coarser settings send fewer, slightly bigger steps. The Natural curve makes sunrises and sunsets look even to the eye.",
+        "data": {
+          "fade_interval": "Smoothness",
+          "fade_curve": "Curve"
+        }
+      },
+      "power": {
+        "title": "Power limit",
+        "description": "The app never lets the light's total power go above 100 % (R counts 39 %, G 41 %, B 53 %, UV 11 % at full). With all channels at 100 % the light would draw 144 %, which can overheat the LEDs and power supply. With the limit on, anything above 100 % is scaled down proportionally (same colors, a bit dimmer), and single channel sliders refuse changes that would exceed it, like the app.\n\nOnly turn this off if you know your light can handle it.",
+        "data": {
+          "power_limit": "Keep total power at or below 100 % (recommended)"
+        }
+      }
+    },
+    "error": {
+      "name_empty": "Enter a name.",
+      "name_builtin": "That name is used by one of the app's presets. Choose another.",
+      "no_days": "Choose at least one day.",
+      "too_much_power": "These values add up to more than 100 % total power. Lower one or more channels (R counts 39 %, G 41 %, B 53 %, UV 11 % at full)."
+    }
+  }
+}

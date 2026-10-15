@@ -1,0 +1,54 @@
+name: Test and release
+
+# On every push and pull request: run the tests.
+# On a push to main where manifest.json has a version without a release yet:
+# create the tag and GitHub release, so HACS offers the update.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+      - name: Install test dependencies
+        run: pip install -r requirements_test.txt
+      - name: Run tests
+        run: python -m pytest -v
+
+  release:
+    needs: tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read version from manifest.json
+        id: version
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('custom_components/weekaqua/manifest.json'))['version'])")
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Version in manifest.json: $version"
+      - name: Create release if this version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already released - nothing to do (bump the version in manifest.json to release)."
+            exit 0
+          fi
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          echo "Released $TAG"
