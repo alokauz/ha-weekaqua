@@ -153,7 +153,7 @@ Commands are 8 bytes written to characteristic `FFF2` (service `FFF0`; older boa
 
 ## Icon
 
-The integration ships its own icon (`custom_components/weekaqua/brand/`, Home Assistant 2026.3 or newer): a light bar with its four channels (red, green, blue, UV) shining into the water. Source: `assets/icon.svg`. The HACS dashboard doesn't show icons of this kind yet (a HACS limitation); Home Assistant itself does.
+The integration ships its own icon (`custom_components/weekaqua/brand/`, Home Assistant 2026.3 or newer): an aquarium with the light bar on its rim, its four channels (red, green, blue, UV) shining into the water onto a plant. Source: `assets/icon.svg`. The HACS dashboard doesn't show icons of this kind yet (a HACS limitation); Home Assistant itself does.
 
 ## Development
 

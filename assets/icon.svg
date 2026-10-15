@@ -1,43 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0E4D63"/>
-      <stop offset="1" stop-color="#062634"/>
-    </linearGradient>
-    <linearGradient id="ray_r" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="490">
-      <stop offset="0" stop-color="#FF5C6C" stop-opacity="1"/>
-      <stop offset="0.6" stop-color="#FF5C6C" stop-opacity="0.8"/>
-      <stop offset="1" stop-color="#FF5C6C" stop-opacity="0.15"/>
-    </linearGradient>
-    <linearGradient id="ray_g" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="490">
-      <stop offset="0" stop-color="#38D98A" stop-opacity="1"/>
-      <stop offset="0.6" stop-color="#38D98A" stop-opacity="0.8"/>
-      <stop offset="1" stop-color="#38D98A" stop-opacity="0.15"/>
-    </linearGradient>
-    <linearGradient id="ray_b" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="490">
-      <stop offset="0" stop-color="#3D8BFF" stop-opacity="1"/>
-      <stop offset="0.6" stop-color="#3D8BFF" stop-opacity="0.8"/>
-      <stop offset="1" stop-color="#3D8BFF" stop-opacity="0.15"/>
-    </linearGradient>
-    <linearGradient id="ray_uv" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="490">
-      <stop offset="0" stop-color="#A35CFF" stop-opacity="1"/>
-      <stop offset="0.6" stop-color="#A35CFF" stop-opacity="0.8"/>
-      <stop offset="1" stop-color="#A35CFF" stop-opacity="0.15"/>
-    </linearGradient>
-    <clipPath id="tile"><rect x="16" y="16" width="480" height="480" rx="104"/></clipPath>
-  </defs>
-  <!-- water tile -->
-  <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#water)"/>
-  <g clip-path="url(#tile)">
-    <!-- the light's four channels fanning into the tank: R, G, B, UV -->
-      <polygon points="132,150 192,150 143,520 20,520" fill="url(#ray_r)"/>
-      <polygon points="200,150 252,150 248,520 158,520" fill="url(#ray_g)"/>
-      <polygon points="260,150 312,150 354,520 264,520" fill="url(#ray_b)"/>
-      <polygon points="320,150 380,150 492,520 369,520" fill="url(#ray_uv)"/>
-    <!-- waterline -->
-    <path d="M16 262 C 76 236, 136 236, 196 262 S 316 288, 376 262 S 466 238, 496 252"
-          fill="none" stroke="#E9F6FA" stroke-width="16" stroke-linecap="round"/>
-  </g>
-  <!-- light bar -->
-  <rect x="112" y="104" width="288" height="52" rx="26" fill="#EEF3F6"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><defs>
+<linearGradient id="bgdark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0E4D63"/><stop offset="1" stop-color="#062634"/></linearGradient>
+<linearGradient id="tw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B4459"/><stop offset="1" stop-color="#05202C"/></linearGradient>
+<linearGradient id="leafg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C4FFE0"/><stop offset="1" stop-color="#3CCB80"/></linearGradient>
+<linearGradient id="b0" gradientUnits="userSpaceOnUse" x1="0" y1="160" x2="0" y2="440"><stop offset="0" stop-color="#FF5C6C" stop-opacity="0.95"/><stop offset="0.6" stop-color="#FF5C6C" stop-opacity="0.55"/><stop offset="1" stop-color="#FF5C6C" stop-opacity="0.12"/></linearGradient><linearGradient id="b1" gradientUnits="userSpaceOnUse" x1="0" y1="160" x2="0" y2="440"><stop offset="0" stop-color="#38D98A" stop-opacity="0.95"/><stop offset="0.6" stop-color="#38D98A" stop-opacity="0.55"/><stop offset="1" stop-color="#38D98A" stop-opacity="0.12"/></linearGradient><linearGradient id="b2" gradientUnits="userSpaceOnUse" x1="0" y1="160" x2="0" y2="440"><stop offset="0" stop-color="#3D8BFF" stop-opacity="0.95"/><stop offset="0.6" stop-color="#3D8BFF" stop-opacity="0.55"/><stop offset="1" stop-color="#3D8BFF" stop-opacity="0.12"/></linearGradient><linearGradient id="b3" gradientUnits="userSpaceOnUse" x1="0" y1="160" x2="0" y2="440"><stop offset="0" stop-color="#A35CFF" stop-opacity="0.95"/><stop offset="0.6" stop-color="#A35CFF" stop-opacity="0.55"/><stop offset="1" stop-color="#A35CFF" stop-opacity="0.12"/></linearGradient></defs><rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bgdark)"/><rect x="80" y="176" width="352" height="256" rx="18" fill="url(#tw)"/>
+<clipPath id="in1"><rect x="80" y="176" width="352" height="256" rx="18"/></clipPath>
+<g clip-path="url(#in1)"><polygon points="154.0,160 199.0,160 156.0,440 77.0,440" fill="url(#b0)"/><polygon points="207.0,160 252.0,160 249.0,440 170.0,440" fill="url(#b1)"/><polygon points="260.0,160 305.0,160 342.0,440 263.0,440" fill="url(#b2)"/><polygon points="313.0,160 358.0,160 435.0,440 356.0,440" fill="url(#b3)"/><path d="M70 214 C 126.1 198, 200.9 198, 257.0 214 S 387.9 230, 444 206.0" fill="none" stroke="#E9F6FA" stroke-width="10" stroke-linecap="round" opacity="0.9"/><path d="M70 412 C 150 398, 250 404, 330 398 S 420 402, 444 400 L 444 444 L 70 444 Z" fill="#2C5A69"/>
+<g transform="translate(226 410) rotate(0)"><path d="M0 0 C -48 -55.199999999999996, -48 -128.79999999999998, 0 -184 C 48 -128.79999999999998, 48 -55.199999999999996, 0 0 Z" fill="url(#leafg)" stroke="#04161E" stroke-width="9" stroke-linejoin="round"/><path d="M0 -6 L0 -156.4" stroke="#0B5A3A" stroke-width="6.3" stroke-linecap="round"/></g><g transform="translate(240 412) rotate(52)"><path d="M0 0 C -34 -38.4, -34 -89.6, 0 -128 C 34 -89.6, 34 -38.4, 0 0 Z" fill="url(#leafg)" stroke="#04161E" stroke-width="9" stroke-linejoin="round"/><path d="M0 -6 L0 -108.8" stroke="#0B5A3A" stroke-width="6.3" stroke-linecap="round"/></g></g>
+<rect x="72" y="168" width="368" height="272" rx="26" fill="none" stroke="#DDEFF4" stroke-width="14"/>
+<rect x="128" y="120" width="256" height="40" rx="20" fill="#EEF3F6"/></svg>
