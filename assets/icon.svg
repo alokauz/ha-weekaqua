@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E4D63"/>
+      <stop offset="1" stop-color="#062634"/>
+    </linearGradient>
+    <linearGradient id="ray_r" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="490">
+      <stop offset="0" stop-color="#FF5C6C" stop-opacity="1"/>
+      <stop offset="0.6" stop-color="#FF5C6C" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#FF5C6C" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="ray_g" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="490">
+      <stop offset="0" stop-color="#38D98A" stop-opacity="1"/>
+      <stop offset="0.6" stop-color="#38D98A" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#38D98A" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="ray_b" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="490">
+      <stop offset="0" stop-color="#3D8BFF" stop-opacity="1"/>
+      <stop offset="0.6" stop-color="#3D8BFF" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#3D8BFF" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="ray_uv" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="490">
+      <stop offset="0" stop-color="#A35CFF" stop-opacity="1"/>
+      <stop offset="0.6" stop-color="#A35CFF" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#A35CFF" stop-opacity="0.15"/>
+    </linearGradient>
+    <clipPath id="tile"><rect x="16" y="16" width="480" height="480" rx="104"/></clipPath>
+  </defs>
+  <!-- water tile -->
+  <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#water)"/>
+  <g clip-path="url(#tile)">
+    <!-- the light's four channels fanning into the tank: R, G, B, UV -->
+      <polygon points="132,150 192,150 143,520 20,520" fill="url(#ray_r)"/>
+      <polygon points="200,150 252,150 248,520 158,520" fill="url(#ray_g)"/>
+      <polygon points="260,150 312,150 354,520 264,520" fill="url(#ray_b)"/>
+      <polygon points="320,150 380,150 492,520 369,520" fill="url(#ray_uv)"/>
+    <!-- waterline -->
+    <path d="M16 262 C 76 236, 136 236, 196 262 S 316 288, 376 262 S 466 238, 496 252"
+          fill="none" stroke="#E9F6FA" stroke-width="16" stroke-linecap="round"/>
+  </g>
+  <!-- light bar -->
+  <rect x="112" y="104" width="288" height="52" rx="26" fill="#EEF3F6"/>
+</svg>

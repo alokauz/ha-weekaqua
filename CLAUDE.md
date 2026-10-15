@@ -49,6 +49,7 @@ Installed by users through HACS from this repository. Owner: Flint.
 | `sensor.py` | Power, Next step, Current step, All steps |
 | `config_flow.py` | Bluetooth discovery + the **Configure** menu (options flow) |
 | `strings.json` + `translations/en.json` | UI texts — **keep both identical** |
+| `brand/icon.png`, `brand/icon@2x.png` | Integration icon (256 / 512 px), rendered from `assets/icon.svg` |
 
 ## Design decisions to keep
 

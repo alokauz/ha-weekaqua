@@ -151,6 +151,10 @@ Commands are 8 bytes written to characteristic `FFF2` (service `FFF0`; older boa
 | Clock | `FF HH MM SS 55 55 55 55` (decimal digits written as hex) |
 | Simple / advanced schedule | `FD F1 55…` / `FD F2 55…` |
 
+## Icon
+
+The integration ships its own icon (`custom_components/weekaqua/brand/`, Home Assistant 2026.3 or newer): a light bar with its four channels (red, green, blue, UV) shining into the water. Source: `assets/icon.svg`. The HACS dashboard doesn't show icons of this kind yet (a HACS limitation); Home Assistant itself does.
+
 ## Development
 
 `CLAUDE.md` describes the protocol, the code layout and the design decisions. Tests: `python -m pip install -r requirements_test.txt`, then `python -m pytest` (Python 3.13; on Windows use WSL). Pushing a new `version` in `manifest.json` to `main` runs the tests and publishes the release automatically.
