@@ -23,5 +23,5 @@
   "iot_class": "assumed_state",
   "issue_tracker": "https://github.com/alokauz/ha-weekaqua/issues",
   "requirements": [],
-  "version": "0.9.1b1"
+  "version": "0.9.1b2"
 }

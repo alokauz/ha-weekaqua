@@ -115,9 +115,9 @@ class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
             return "No steps"
         parts = []
         for step in steps:
-            target = "Off" if step["target"] == OFF_TARGET else f"On {step['target']}"
-            parts.append(f"{step['time']} {target}")
-        summary = " → ".join(parts)
+            target = "Off" if step["target"] == OFF_TARGET else f"On · {step['target']}"
+            parts.append(f"{step['time']} · {target}")
+        summary = " | ".join(parts)
         return summary if len(summary) <= 255 else summary[:252] + "..."
 
     @property

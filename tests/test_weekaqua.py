@@ -542,7 +542,7 @@ async def test_recent_presets_sensors_and_logs(hass, client, freezer, caplog):
     # Sensors
     steps = hass.states.get("sensor.b3_0_l600pro_71_all_steps")
     print(steps.state, steps.attributes)
-    assert steps.state == "00:59 On Chat GPT → 15:00 On Green → 21:00 Off"
+    assert steps.state == "00:59 · On · Chat GPT | 15:00 · On · Green | 21:00 · Off"
     assert steps.attributes["step_2"] == "15:00 · On · Green 100% · fade 60 min (linear, coarse) · every day"
     cur = hass.states.get("sensor.b3_0_l600pro_71_current_step")
     print(cur.state)
