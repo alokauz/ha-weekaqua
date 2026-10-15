@@ -77,6 +77,11 @@ python -m pip install -r requirements_test.txt   # Python 3.13
 python -m pytest
 ```
 
+`requirements_test.txt` also pins the requirements of HA's `bluetooth`,
+`bluetooth_adapters` and `usb` components (the test package doesn't include
+them). When bumping `pytest-homeassistant-custom-component`, update those pins
+from the new HA version's `components/<name>/manifest.json`.
+
 Home Assistant's test tools are made for Linux/macOS; on Windows run them in WSL
 (`wsl`, then the commands above) if they won't install natively. GitHub Actions
 also runs them on every push (`.github/workflows/release.yml`).
