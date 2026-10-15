@@ -137,7 +137,7 @@
       },
       "fade": {
         "title": "Fade smoothness and curve",
-        "description": "Smoothness sets how often the light gets a new level during a fade: Fine sends a command for every level step (smoothest, most commands); coarser settings send fewer, slightly bigger steps. The Natural curve makes sunrises and sunsets look even to the eye.",
+        "description": "Smoothness sets how often the light gets a new level during a fade: Fine sends a command for every level step (smoothest, most commands); Medium (the default) and coarser settings send fewer, slightly bigger steps. The Natural curve makes sunrises and sunsets look even to the eye.",
         "data": {
           "fade_interval": "Smoothness",
           "fade_curve": "Curve"

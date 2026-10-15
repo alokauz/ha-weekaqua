@@ -14,6 +14,7 @@ from .const import (
     CONF_POWER_LIMIT,
     CONF_PRESETS,
     CONF_SCHEDULE,
+    DEFAULT_FADE_INTERVAL,
 )
 from .device import WeekAquaDevice
 from .schedule import WeekAquaScheduler
@@ -36,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: WeekAquaConfigEntry) -> 
     name = entry.data.get(CONF_NAME) or entry.title
     device = WeekAquaDevice(hass, address, name, entry.options.get(CONF_PRESETS, {}))
     device.input_mode = entry.options.get(CONF_INPUT_MODE, "slider")
-    device.fade_interval = float(entry.options.get(CONF_FADE_INTERVAL, "0.5"))
+    device.fade_interval = float(entry.options.get(CONF_FADE_INTERVAL, DEFAULT_FADE_INTERVAL))
     device.fade_curve = entry.options.get(CONF_FADE_CURVE, "perceptual")
     device.power_limit = entry.options.get(CONF_POWER_LIMIT, True)
     device.scheduler = WeekAquaScheduler(hass, device, entry.options.get(CONF_SCHEDULE, []))

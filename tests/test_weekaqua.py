@@ -116,7 +116,7 @@ async def test_fades(hass, client):
     out = sent(client)
     print(len(out), out[:3], out[-1])
     assert out[-1] == "FBF977EB77005555"
-    assert 100 <= len(out) <= 120                 # gradual, max 2 steps/s
+    assert 5 <= len(out) <= 7                     # Medium (default): one step per 10 s
     assert out[0] != out[-1]
     st = hass.states.get(light)
     assert st.state == "on" and st.attributes["effect"] == "Nature" and st.attributes["fading"] is False
@@ -213,7 +213,7 @@ async def test_custom_presets(hass, client):
     await call("light", "turn_on", {"entity_id": "light.b3_0_l600pro_71", "effect": "My Reef", "transition": 20}, blocking=True)
     await hass.async_block_till_done(wait_background_tasks=True)
     out = sent(client)
-    assert out[-1] == "FBF978EB78465555" and len(out) > 10
+    assert out[-1] == "FBF978EB78465555" and len(out) >= 2
     assert hass.states.get("light.b3_0_l600pro_71").attributes["effect"] == "My Reef"
 
     # Remove it
@@ -247,7 +247,7 @@ async def test_schedule(hass, client, freezer):
     sw, nxt = "switch.b3_0_l600pro_71_schedule", "sensor.b3_0_l600pro_71_next_step"
     assert hass.states.get(sw).state == "on"
     print(hass.states.get(nxt).state, hass.states.get(nxt).attributes)
-    assert hass.states.get(nxt).attributes["step"] == "08:00 · Nature 80% · fade 30 min · every day"
+    assert hass.states.get(nxt).attributes["step"] == "08:00 · On · Nature 80% · fade 30 min · every day"
 
     # 08:00 fires: fade to Nature at 80 %
     freezer.move_to(datetime(2026, 10, 14, 8, 0, 0, tzinfo=tz))
@@ -291,7 +291,7 @@ async def test_schedule_and_display_forms(hass, client):
     await hass.async_block_till_done()
     assert entry.options["schedule"] == [{"time": "09:30", "target": "Fresh", "brightness": 60, "fade": 45.0, "days": [0, 1, 2, 3, 4]}]
     st = hass.states.get("switch.b3_0_l600pro_71_schedule")
-    assert st.attributes["steps"] == ["09:30 · Fresh 60% · fade 45 min · Mon–Fri"]
+    assert st.attributes["steps"] == ["09:30 · On · Fresh 60% · fade 45 min · Mon–Fri"]
 
     flow = await hass.config_entries.options.async_init(entry.entry_id)
     assert "remove_schedule" in flow["menu_options"]
@@ -422,8 +422,12 @@ async def test_fade_curve_smoothness_and_state_updates(hass, client):
             await hass.async_block_till_done(wait_background_tasks=True)
         return sent(client)
 
-    # Default: fine + natural curve, 45-minute sunrise into White (7E EB 69 00)
+    # New setups default to Medium smoothness and the Natural curve
+    assert entry.runtime_data.fade_interval == 10.0 and entry.runtime_data.fade_curve == "perceptual"
     out = await run_fade(2700)
+    assert out[-1] == "FBF97EEB69005555" and len(out) <= 2700 / 10 + 1
+    # Fine + natural curve, 45-minute sunrise into White (7E EB 69 00)
+    out = await run_fade(2700, {"fade_interval": "0.5", "fade_curve": "perceptual"})
     levels = [bytes.fromhex(c)[3] for c in out]           # green channel
     print("fine/natural:", len(out), "commands,", len(states), "light state updates; first greens", levels[:8])
     assert out[-1] == "FBF97EEB69005555"
@@ -474,7 +478,7 @@ async def test_schedule_step_fade_overrides(hass, client, freezer):
     assert "curve" not in steps[1] and "smoothness" not in steps[1]
     st = hass.states.get("switch.b3_0_l600pro_71_schedule").attributes["steps"]
     print(st)
-    assert st[0] == "08:00 · White 100% · fade 45 min (linear, coarse) · every day"
+    assert st[0] == "08:00 · On · White 100% · fade 45 min (linear, coarse) · every day"
     assert st[1] == "09:00 · Off · fade 45 min · every day"
 
     # Run the 08:00 step on a fake clock: coarse => <= 91 commands, linear => half-way ~ half
@@ -538,8 +542,8 @@ async def test_recent_presets_sensors_and_logs(hass, client, freezer, caplog):
     # Sensors
     steps = hass.states.get("sensor.b3_0_l600pro_71_all_steps")
     print(steps.state, steps.attributes)
-    assert steps.state == "00:59 Chat GPT → 15:00 Green → 21:00 Off"
-    assert steps.attributes["step_2"] == "15:00 · Green 100% · fade 60 min (linear, coarse) · every day"
+    assert steps.state == "00:59 On Chat GPT → 15:00 On Green → 21:00 Off"
+    assert steps.attributes["step_2"] == "15:00 · On · Green 100% · fade 60 min (linear, coarse) · every day"
     cur = hass.states.get("sensor.b3_0_l600pro_71_current_step")
     print(cur.state)
     assert cur.state == "21:00 · Off · fade 60 min · every day"
@@ -554,8 +558,8 @@ async def test_recent_presets_sensors_and_logs(hass, client, freezer, caplog):
     for line in lines:
         print(line)
     text = "\n".join(lines)
-    assert "Running schedule step 00:59 (every day): from R 0% G 0% B 0% UV 0% to preset 'Chat GPT' at 100% (R 51% G 100% B 51% UV 30%), fan 40%, fading over 60 min, curve natural (general setting), smoothness fine (general setting)" in text
-    assert "Fade started: R 0% G 0% B 0% UV 0% -> R 51% G 100% B 51% UV 30% over 60 min, curve natural, smoothness fine" in text
+    assert "Running schedule step 00:59 (every day): from R 0% G 0% B 0% UV 0% to preset 'Chat GPT' at 100% (R 51% G 100% B 51% UV 30%), fan 40%, fading over 60 min, curve natural (general setting), smoothness medium (general setting)" in text
+    assert "Fade started: R 0% G 0% B 0% UV 0% -> R 51% G 100% B 51% UV 30% over 60 min, curve natural, smoothness medium" in text
     assert "Fade finished after" in text and "commands sent, now at R 51% G 100% B 51% UV 30%" in text
     assert hass.states.get(sel).attributes["options"][0] == "Chat GPT"     # schedule use counts too
     assert await hass.config_entries.async_unload(entry.entry_id)

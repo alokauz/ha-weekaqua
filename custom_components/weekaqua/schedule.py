@@ -40,11 +40,11 @@ def step_time(step: dict[str, Any]) -> time:
 
 
 def describe_step(step: dict[str, Any], presets: dict | None = None) -> str:
-    """Human-readable summary, e.g. '08:00 · Nature 80% · fade 45 min · Mon–Fri'."""
+    """Human-readable summary, e.g. '08:00 · On · Nature 80% · fade 45 min · Mon–Fri'."""
     if step["target"] == OFF_TARGET:
         what = "Off"
     else:
-        what = f"{step['target']} {step.get('brightness', 100)}%"
+        what = f"On · {step['target']} {step.get('brightness', 100)}%"
         if presets is not None and step["target"] not in presets:
             what += " (preset missing!)"
     fade = ""

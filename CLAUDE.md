@@ -91,13 +91,25 @@ bytes sent. Patching `asyncio.sleep` in `device` patches it globally — only
 freeze long waits. Fake clocks via `loop.time` must not be active while waiting
 for HA's own time triggers.
 
-## Releasing an update
+## Versions and releases
+
+Semantic versioning: MAJOR.MINOR.PATCH (patch = fixes and small adjustments,
+minor = new features, major = breaking changes for existing users, e.g. entity
+IDs or option formats). Still 0.x: go to 1.0.0 once the owner says it has
+proven itself in daily use.
+
+Changes are tested by the owner as **betas** before a real release:
 
 1. Make the change, add or adjust tests, run `python -m pytest`.
-2. Bump `version` in `custom_components/weekaqua/manifest.json`
-   (patch for fixes, minor for features).
-3. Update `README.md` if users see a difference.
-4. Commit and push to `main`. The workflow runs the tests and, if they pass and
-   the version is new, creates release `v<version>`. HACS then offers the update.
+2. Set `version` in `custom_components/weekaqua/manifest.json` to the next
+   version with a beta suffix, e.g. `0.9.1b1` (next beta of the same version:
+   `0.9.1b2`). Push to `main`. The workflow runs the tests and publishes a
+   **pre-release** `v0.9.1b1`; HACS only shows it with "Show beta versions".
+3. The owner installs it (HACS → Week Aqua → Redownload → Show beta versions)
+   and tests it.
+4. When the owner approves, set the version to `0.9.1` (no suffix) and push:
+   that becomes the normal release everyone gets.
 
-Never push with failing tests. Don't create releases by hand.
+Several changes can be collected in one beta. Commits without a version change
+are not released. Update `README.md` when users see a difference. Never push
+with failing tests. Don't create releases by hand.

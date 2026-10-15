@@ -35,6 +35,7 @@ from .const import (
     CONF_FADE_CURVE,
     CONF_FADE_INTERVAL,
     CURVE_LABELS,
+    DEFAULT_FADE_INTERVAL,
     FADE_SMOOTHNESS,
     CONF_INPUT_MODE,
     CONF_POWER_LIMIT,
@@ -189,7 +190,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
         ]
         days = [SelectOptionDict(value=str(i), label=DAY_NAMES[i]) for i in ALL_DAYS]
         general_curve = self.config_entry.options.get(CONF_FADE_CURVE, "perceptual")
-        general_smooth = self.config_entry.options.get(CONF_FADE_INTERVAL, "0.5")
+        general_smooth = self.config_entry.options.get(CONF_FADE_INTERVAL, DEFAULT_FADE_INTERVAL)
         curve_options = [
             SelectOptionDict(value="default", label=f"Use general setting ({CURVE_LABELS[general_curve]})"),
             *(SelectOptionDict(value=k, label=v) for k, v in CURVE_LABELS.items()),
@@ -263,7 +264,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_FADE_INTERVAL, default=options.get(CONF_FADE_INTERVAL, "0.5")
+                        CONF_FADE_INTERVAL, default=options.get(CONF_FADE_INTERVAL, DEFAULT_FADE_INTERVAL)
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=[

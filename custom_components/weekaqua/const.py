@@ -13,6 +13,8 @@ CONF_INPUT_MODE = "input_mode"
 CONF_FADE_INTERVAL = "fade_interval"
 CONF_FADE_CURVE = "fade_curve"
 CURVE_LABELS = {"perceptual": "Natural (follows how eyes see brightness)", "linear": "Linear (equal steps in LED power)"}
+# Default smoothness: Medium (at most one command every 10 s)
+DEFAULT_FADE_INTERVAL = "10"
 FADE_SMOOTHNESS = {"0.5": "Fine (every level)", "10": "Medium (every 10 s at most)", "30": "Coarse (every 30 s at most)", "60": "Very coarse (every minute at most)"}
 
 # The app writes to ffe1 on older Bluetooth boards and fff2 on B3.0 boards.

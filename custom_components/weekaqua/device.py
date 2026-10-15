@@ -71,7 +71,7 @@ class WeekAquaDevice:
         # Keep total power at or below 100 %, like the app (Configure can turn it off)
         self.power_limit = True
         # Fade settings (from Configure): shortest seconds between commands, and curve
-        self.fade_interval = MIN_STEP_INTERVAL
+        self.fade_interval = 10.0  # Medium; set from options in __init__.py
         self.fade_curve = "perceptual"
         self.scheduler = None  # set in __init__.py
         # Fan speed in percent, None until it has been set once.
