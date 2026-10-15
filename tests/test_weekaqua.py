@@ -608,3 +608,42 @@ async def test_power_limit(hass, client):
     assert sent(client)[-1] == "FBF9EBEBEBEB5555"
     assert hass.states.get(power).state == "144.0"
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_step_icons(hass, client, freezer):
+    """Current/Next step icons: sunrise (on after off), change (on while on), sunset (off)."""
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [
+        {"time": "08:00", "target": "Nature", "brightness": 100, "fade": 30, "days": every},
+        {"time": "13:00", "target": "White", "brightness": 100, "fade": 30, "days": every},
+        {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 60, "days": every},
+    ]
+    freezer.move_to(datetime(2026, 10, 15, 10, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+                            data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options={"schedule": steps})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    cur, nxt = "sensor.b3_0_l600pro_71_current_step", "sensor.b3_0_l600pro_71_next_step"
+
+    def icons():
+        return hass.states.get(cur).attributes.get("icon"), hass.states.get(nxt).attributes.get("icon")
+
+    assert icons() == ("mdi:weather-sunset-up", "mdi:palette")              # 10:00
+    assert hass.states.get(cur).attributes["kind"] == "sunrise"
+    for when, expected in [
+        ((14, 0), ("mdi:palette", "mdi:weather-sunset-down")),              # after the midday change
+        ((22, 0), ("mdi:weather-sunset-down", "mdi:weather-sunset-up")),    # night: next is tomorrow's sunrise
+    ]:
+        freezer.move_to(datetime(2026, 10, 15, *when, 0, tzinfo=tz))
+        entry.runtime_data.scheduler._notify()
+        await hass.async_block_till_done()
+        assert icons() == expected, when
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": "switch.b3_0_l600pro_71_schedule"}, blocking=True)
+    assert icons() == ("mdi:calendar-remove", "mdi:calendar-arrow-right")
+    assert await hass.config_entries.async_unload(entry.entry_id)

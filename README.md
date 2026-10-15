@@ -81,7 +81,7 @@ Under **Configure → Add or update a schedule step**, choose a time, a preset (
 | 13:00 | White 100 % | 30 min | every day |
 | 21:00 | Off | 60 min | every day |
 
-- Sensors **All steps**, **Current step** and **Next step** show the schedule on the device page.
+- Sensors **All steps**, **Current step** and **Next step** show the schedule on the device page. The step sensors' icons show what a step does: sunrise (on after off), palette (color change while on) or sunset (off).
 - With `info` logging (see Troubleshooting), every step logs what it does: preset and channel values, fan, fade duration, curve, smoothness, number of steps and the time between them.
 - The **Schedule** switch pauses it. Turning it back on puts the light where the schedule should be right now (continuing a fade in progress).
 - After a Home Assistant restart the light is also brought back in line with the schedule.

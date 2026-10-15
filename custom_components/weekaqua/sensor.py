@@ -19,6 +19,13 @@ from .entity import WeekAquaEntity
 from .const import total_power
 from .schedule import OFF_TARGET, describe_step
 
+# Icons for what a step does: sun rising, sun setting, or a color change
+STEP_ICONS = {
+    "sunrise": "mdi:weather-sunset-up",
+    "sunset": "mdi:weather-sunset-down",
+    "change": "mdi:palette",
+}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -56,11 +63,21 @@ class WeekAquaNextStep(WeekAquaEntity, SensorEntity):
         return self._scheduler.next_step()[1]
 
     @property
+    def icon(self) -> str:
+        step, when = self._scheduler.next_step()
+        if not self._scheduler.enabled or step is None:
+            return "mdi:calendar-arrow-right"
+        return STEP_ICONS[self._scheduler.step_kind(step, when)]
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        step, _ = self._scheduler.next_step()
+        step, when = self._scheduler.next_step()
         if not self._scheduler.enabled or step is None:
             return {}
-        return {"step": describe_step(step, self._device.presets)}
+        return {
+            "step": describe_step(step, self._device.presets),
+            "kind": self._scheduler.step_kind(step, when),
+        }
 
 
 class WeekAquaCurrentStep(WeekAquaEntity, SensorEntity):
@@ -87,11 +104,20 @@ class WeekAquaCurrentStep(WeekAquaEntity, SensorEntity):
         return describe_step(step, self._device.presets)[:255]
 
     @property
+    def icon(self) -> str:
+        if not self._scheduler.enabled:
+            return "mdi:calendar-remove"
+        step, when = self._scheduler.last_step()
+        if step is None:
+            return "mdi:calendar-check"
+        return STEP_ICONS[self._scheduler.step_kind(step, when)]
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         step, when = self._scheduler.last_step()
         if not self._scheduler.enabled or step is None:
             return {}
-        return {"started": when.isoformat()}
+        return {"started": when.isoformat(), "kind": self._scheduler.step_kind(step, when)}
 
 
 class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):

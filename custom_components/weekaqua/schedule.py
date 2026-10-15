@@ -235,6 +235,15 @@ class WeekAquaScheduler:
     def next_step(self, now: datetime | None = None):
         return next(self._occurrences(now or dt_util.now(), False), (None, None))
 
+    def step_kind(self, step: dict[str, Any], when: datetime) -> str:
+        """'sunset' (to Off), 'sunrise' (On after Off) or 'change' (On while on)."""
+        if step["target"] == OFF_TARGET:
+            return "sunset"
+        previous, _ = self.last_step(when - timedelta(seconds=1))
+        if previous is None or previous["target"] == OFF_TARGET:
+            return "sunrise"
+        return "change"
+
     async def apply_current(self) -> None:
         """Put the light where the schedule says it should be now.
 
