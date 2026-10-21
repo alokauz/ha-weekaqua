@@ -2,6 +2,13 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b1
+
+- **Edit a preset** (Configure): pick a preset from a list that shows its values (channels, fan, total power), then change them in a form filled with that preset, including its name. Renaming keeps schedule steps that use the preset working. **Show on the light now** sends the new values to the light when you save.
+- **Add a preset** is only for new presets now and warns about an existing name instead of overwriting it.
+- **Remove presets** shows each preset's values.
+- Includes everything from the 0.9.1 betas (0.9.1 itself won't be released separately).
+
 ## 0.9.1b5
 
 - New integration icon: an aquarium with the light bar on its rim, shining its red, green, blue and UV channels onto a plant (Home Assistant 2026.3 or newer). The HACS list doesn't show integration icons of this kind yet.

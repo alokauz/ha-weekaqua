@@ -76,18 +76,19 @@
       "init": {
         "title": "Week Aqua settings",
         "menu_options": {
-          "add_preset": "Add or update a preset",
+          "add_preset": "Add a preset",
           "remove_preset": "Remove presets",
           "add_schedule": "Add or update a schedule step",
           "remove_schedule": "Remove schedule steps",
           "display": "Slider or number input",
           "fade": "Fade smoothness and curve",
-          "power": "Power limit"
+          "power": "Power limit",
+          "edit_preset": "Edit a preset"
         }
       },
       "add_preset": {
-        "title": "Add or update a preset",
-        "description": "The values start at what the light is showing now. Using the name of one of your presets updates it. Leave Fan empty to keep the fan unchanged when the preset is used. Total power must stay at or below 100 % (the values shown now: {power} %).",
+        "title": "Add a preset",
+        "description": "The values start at what the light is showing now (total power {power} %), so the easiest way is to set the light up on the device page first. Leave Fan empty if the preset shouldn't change the fan. Total power must stay at or below 100 %.",
         "data": {
           "name": "Name",
           "red": "1. R",
@@ -101,7 +102,8 @@
         "title": "Remove presets",
         "data": {
           "remove": "Presets to remove"
-        }
+        },
+        "description": "Schedule steps that use a removed preset are skipped (with a warning in the log)."
       },
       "add_schedule": {
         "title": "Add or update a schedule step",
@@ -149,13 +151,38 @@
         "data": {
           "power_limit": "Keep total power at or below 100 % (recommended)"
         }
+      },
+      "edit_preset": {
+        "title": "Edit a preset",
+        "description": "Choose the preset to edit.",
+        "data": {
+          "preset": "Preset"
+        }
+      },
+      "edit_preset_values": {
+        "title": "Edit {name}",
+        "description": "Now: {current}\nUsed by: {used_by}\n\nChange the name to rename it (schedule steps follow). Leave Fan empty if the preset shouldn't change the fan.",
+        "data": {
+          "name": "Name",
+          "red": "1. R",
+          "green": "2. G",
+          "blue": "3. B",
+          "uv": "4. UV",
+          "fan": "5. Fan",
+          "apply": "Show on the light now"
+        },
+        "data_description": {
+          "apply": "Sends the new values to the light when you submit."
+        }
       }
     },
     "error": {
       "name_empty": "Enter a name.",
       "name_builtin": "That name is used by one of the app's presets. Choose another.",
       "no_days": "Choose at least one day.",
-      "too_much_power": "These values add up to more than 100 % total power. Lower one or more channels (R counts 39 %, G 41 %, B 53 %, UV 11 % at full)."
+      "too_much_power": "These values add up to more than 100 % total power. Lower one or more channels (R counts 39 %, G 41 %, B 53 %, UV 11 % at full).",
+      "name_exists": "You already have a preset with this name. Use Edit a preset to change it.",
+      "cannot_apply": "Couldn't reach the light to show the preset (is the phone app connected?). Untick Show on the light now to just save it."
     }
   }
 }

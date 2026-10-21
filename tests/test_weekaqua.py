@@ -218,7 +218,7 @@ async def test_custom_presets(hass, client):
 
     # Remove it
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["menu_options"] == ["add_preset", "remove_preset", "add_schedule", "fade", "power", "display"]
+    assert flow["menu_options"] == ["add_preset", "edit_preset", "remove_preset", "add_schedule", "fade", "power", "display"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "remove_preset"})
     await hass.config_entries.options.async_configure(flow["flow_id"], {"remove": ["My Reef"]})
     await hass.async_block_till_done()
@@ -646,4 +646,65 @@ async def test_step_icons(hass, client, freezer):
 
     await hass.services.async_call("switch", "turn_off", {"entity_id": "switch.b3_0_l600pro_71_schedule"}, blocking=True)
     assert icons() == ("mdi:calendar-remove", "mdi:calendar-arrow-right")
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_edit_preset(hass, client):
+    options = {
+        "presets": {"Chat GPT": {"levels": [120, 235, 120, 70], "fan": 40},
+                    "Night": {"levels": [0, 0, 40, 20], "fan": None}},
+        "schedule": [{"time": "15:00", "target": "Chat GPT", "brightness": 100, "fade": 60, "days": [0, 1, 2, 3, 4, 5, 6]},
+                     {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 60, "days": [0, 1, 2, 3, 4, 5, 6]}],
+    }
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+                            data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options=options)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    assert flow["menu_options"][:3] == ["add_preset", "edit_preset", "remove_preset"]
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "edit_preset"})
+    labels = [o["label"] for o in next(iter(flow["data_schema"].schema.values())).config["options"]]
+    print(labels)
+    assert labels[0] == "Chat GPT — R 51% G 100% B 51% UV 30% · fan 40% · power 91%"
+    assert labels[1] == "Night — R 0% G 0% B 17% UV 9% · power 10%"
+
+    # Pick Chat GPT: the form shows its values, name included
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"preset": "Chat GPT"})
+    assert flow["step_id"] == "edit_preset_values"
+    defaults = {str(k): k.default() for k in flow["data_schema"].schema if callable(getattr(k, "default", None))}
+    assert defaults["name"] == "Chat GPT" and defaults["red"] == 51 and defaults["green"] == 100 and defaults["uv"] == 30
+    assert flow["description_placeholders"]["used_by"] == "15:00"
+
+    # Renaming to an existing preset is refused
+    bad = await hass.config_entries.options.async_configure(flow["flow_id"],
+        {"name": "Night", "red": 51, "green": 100, "blue": 51, "uv": 30, "fan": 40})
+    assert bad["errors"] == {"name": "name_exists"}
+
+    # Rename + change UV + show on the light now
+    client.write_gatt_char.reset_mock()
+    done = await hass.config_entries.options.async_configure(bad["flow_id"],
+        {"name": "Afternoon", "red": 51, "green": 100, "blue": 51, "uv": 10, "fan": 40, "apply": True})
+    assert done["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    print(sent(client))
+    assert sent(client) == ["FC5E555555555555", "FBF978EB78185555"]
+    assert list(entry.options["presets"]) == ["Afternoon", "Night"]          # same place, new name
+    assert entry.options["presets"]["Afternoon"] == {"levels": [120, 235, 120, 24], "fan": 40}
+    assert entry.options["schedule"][0]["target"] == "Afternoon"              # schedule followed the rename
+    assert "Afternoon" in hass.states.get("select.b3_0_l600pro_71_preset").attributes["options"]
+
+    # Adding a preset with an existing name is refused (edit is for that)
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_preset"})
+    bad = await hass.config_entries.options.async_configure(flow["flow_id"],
+        {"name": "Night", "red": 0, "green": 0, "blue": 20, "uv": 10})
+    assert bad["errors"] == {"name": "name_exists"}
+
+    # Remove list shows values too
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "remove_preset"})
+    labels = [o["label"] for o in next(iter(flow["data_schema"].schema.values())).config["options"]]
+    assert labels[0].startswith("Afternoon — R 51% G 100% B 51% UV 10%")
     assert await hass.config_entries.async_unload(entry.entry_id)
