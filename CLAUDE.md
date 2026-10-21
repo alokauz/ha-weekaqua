@@ -133,6 +133,8 @@ Changes are tested by the owner as **betas** before a real release:
 5. When the owner approves, set the version to `0.9.1` (no suffix) and push:
    that becomes the normal release everyone gets.
 
+**Never use a pre-release number above 9** (b10, rc10): GitHub lists releases by name, character by character, and HACS follows that order, so b10 sorts before b2. After b9 go to rc1 ("r" sorts after "b"), or to the next patch version. The release workflow refuses two-digit numbers.
+
 Several changes can be collected in one beta. Commits without a version change
 are not released. Update `README.md` when users see a difference. Never push
 with failing tests. Don't create releases by hand.

@@ -54,6 +54,13 @@ jobs:
             echo "$TAG already released - nothing to do (bump the version in manifest.json to release)."
             exit 0
           fi
+          # GitHub lists releases by name, character by character, and HACS takes
+          # that order: "b10" would sort before "b2". Never publish a pre-release
+          # number above 9 (use rc1..rc9, or the next patch version instead).
+          if echo "$TAG" | grep -Eq '(a|b|rc)[0-9]{2,}$'; then
+            echo "::error::$TAG has a two-digit pre-release number, which GitHub and HACS would sort wrongly. Use the next rc or patch version instead."
+            exit 1
+          fi
           # Release notes: this version's section of CHANGELOG.md + full changelog link
           python3 .github/release_notes.py "$VERSION" > notes.md
           prev=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)

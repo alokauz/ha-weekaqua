@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0rc1
+
+- Release candidate for 0.10.0, with everything from the 0.10.0 betas. Same code as 0.10.0b10, renumbered: GitHub and HACS sort release names character by character, so "b10" was listed before "b2" and HACS didn't offer it.
+
 ## 0.10.0b10
 
 - New **Step channels** sensor: the actual channel values of the current On step, e.g. `R 30% G 60% B 30% UV 0%`, including acclimation, the CO₂ fallback and the power limit. During an Off step (at night) it shows the next On step. Its details show the step, the brightness with the reason (e.g. `60% (acclimation 60% of 100%)`), the total power and the raw values sent to the light.
