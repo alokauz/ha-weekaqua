@@ -1174,6 +1174,12 @@ async def test_co2_control_day(hass, client, freezer):
     sensor = "sensor.b3_0_l600pro_71_co2_schedule"
     # CO₂ 60 min before the 15:00 On step, off 60 min before the light is fully off at 21:00
     assert hass.states.get(sensor).state == "14:00–20:00 (6 h)"
+    # CO₂ switches are part of the timeline, and the next thing to happen is CO₂ on at 14:00
+    assert hass.states.get("sensor.b3_0_l600pro_71_all_steps").state == "14:00 · CO₂ on | 15:00 · On · Nature | 20:00 · CO₂ off | 21:00 · Off"
+    nxt = hass.states.get("sensor.b3_0_l600pro_71_next_step")
+    assert nxt.attributes["step"] == "14:00 · CO₂ on (60 min before the first On step)"
+    assert nxt.attributes["kind"] == "co2_on" and nxt.attributes["icon"] == "mdi:molecule-co2"
+    assert dt_util.as_local(dt_util.parse_datetime(nxt.state)).strftime("%H:%M") == "14:00"
 
     async def at(h, m):
         freezer.move_to(datetime(2026, 10, 16, h, m, 0, tzinfo=tz))
@@ -1184,11 +1190,17 @@ async def test_co2_control_day(hass, client, freezer):
     await at(13, 59); assert len(on_calls) == 0
     await at(14, 0);  assert len(on_calls) == 1 and on_calls[0].data["entity_id"] == "switch.co2_plug"
     hass.states.async_set("switch.co2_plug", "on"); await let_loop_run()
+    await hass.async_block_till_done()
+    # After CO₂ on, the next thing is the 15:00 sunrise
+    assert hass.states.get("sensor.b3_0_l600pro_71_next_step").attributes["step"].startswith("15:00 · On · Nature")
     # Interlock: CO₂ on since 14:00 -> ready at 15:00, so the 15:00 sunrise goes to full Nature
     await at(15, 0)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert hass.states.get("binary_sensor.b3_0_l600pro_71_co2_ready").state == "on"
     assert sent(client)[-1] == "FBF977EB77005555"
+    # The sunset starts at 20:00, the same minute CO₂ goes off: both are shown
+    nxt = hass.states.get("sensor.b3_0_l600pro_71_next_step").attributes
+    assert nxt["step"] == "21:00 · Off · fade 60 min from 20:00 · every day" and nxt["also"] == "20:00 · CO₂ off"
     await at(19, 59); assert len(off_calls) == 0
     await at(20, 0);  assert len(off_calls) == 1
     hass.states.async_set("switch.co2_plug", "off"); await let_loop_run()

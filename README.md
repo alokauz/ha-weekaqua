@@ -114,7 +114,7 @@ The interlock only checks that the plug is on, not how much CO₂ is in the wate
 
 ### CO₂ control (optional)
 
-The same screen can also **switch the CO₂ plug** from the light schedule: on a set time before the day's first On step, off a set time before the last Off step (the time the light is fully off), never longer than a daily maximum. Every minute, CO₂ is switched off if it's on outside that window, e.g. at night, with the schedule switched off, or turned on by hand. The **CO₂ schedule** sensor shows today's window.
+The same screen can also **switch the CO₂ plug** from the light schedule: on a set time before the day's first On step, off a set time before the last Off step (the time the light is fully off), never longer than a daily maximum. Every minute, CO₂ is switched off if it's on outside that window, e.g. at night, with the schedule switched off, or turned on by hand. The **CO₂ schedule** sensor shows today's window, and the CO₂ switches also appear in **All steps** and **Next step**.
 
 ⚠️ **CO₂ left on without light can kill fish**, and Home Assistant can only switch the plug while it's running. Before enabling CO₂ control, set a **backstop in the plug itself**, e.g. an off-only schedule in the plug's own app shortly after the CO₂ off time (Sonoff/eWeLink: *Schedule*), or auto-off. Also set the plug's power-on state to *Off*. CO₂ isn't switched off when Home Assistant restarts, so CO₂ doesn't drop out (and the interlock doesn't dim the light) after every restart.
 

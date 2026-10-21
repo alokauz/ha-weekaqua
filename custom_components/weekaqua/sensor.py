@@ -59,27 +59,52 @@ class WeekAquaNextStep(WeekAquaEntity, SensorEntity):
         await super().async_added_to_hass()
         self.async_on_remove(self._scheduler.add_listener(self.async_write_ha_state))
 
-    @property
-    def native_value(self) -> datetime | None:
+    def _next(self):
+        """('step', step, when) or ('co2', 'on'/'off', when), whichever comes first."""
         if not self._scheduler.enabled:
             return None
-        return self._scheduler.next_step()[1]
+        step, when = self._scheduler.next_step()
+        co2 = self._device.co2_control.next_event() if self._device.co2_control else None
+        if co2 and (when is None or co2[0] < when):
+            return ("co2", co2[1], co2[0])
+        return ("step", step, when) if step is not None else None
+
+    @property
+    def native_value(self) -> datetime | None:
+        nxt = self._next()
+        return nxt[2] if nxt else None
 
     @property
     def icon(self) -> str:
-        step, when = self._scheduler.next_step()
-        if not self._scheduler.enabled or step is None:
+        nxt = self._next()
+        if nxt is None:
             return "mdi:calendar-arrow-right"
-        return STEP_ICONS[self._scheduler.step_kind(step, when)]
+        if nxt[0] == "co2":
+            return "mdi:molecule-co2"
+        return STEP_ICONS[self._scheduler.step_kind(nxt[1], nxt[2])]
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        step, when = self._scheduler.next_step()
-        if not self._scheduler.enabled or step is None:
+        nxt = self._next()
+        if nxt is None:
             return {}
+        if nxt[0] == "co2":
+            control = self._device.co2_control
+            what = "CO₂ on" if nxt[1] == "on" else "CO₂ off"
+            when = nxt[2].strftime("%H:%M")
+            detail = (
+                f"{control.on_before} min before the first On step"
+                if nxt[1] == "on" else f"{control.off_before} min before the light is off"
+            )
+            return {"step": f"{when} · {what} ({detail})", "kind": f"co2_{nxt[1]}"}
+        step, when = nxt[1], nxt[2]
         attrs = {"step": self._scheduler.describe(step), "kind": self._scheduler.step_kind(step, when)}
         if step["target"] != OFF_TARGET:
             attrs["channels"] = self._scheduler.describe_levels(step)
+        # A CO₂ switch at the same minute is mentioned alongside the light step
+        co2 = self._device.co2_control.next_event() if self._device.co2_control else None
+        if co2 and co2[0] == when:
+            attrs["also"] = f"{when:%H:%M} · CO₂ {co2[1]}"
         return attrs
 
 
@@ -156,6 +181,15 @@ class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
                 parts.append(f"{at} · On · {step['target']} {step.get('brightness', 100) * factor:g}%")
             else:
                 parts.append(f"{at} · On · {step['target']}")
+        control = self._device.co2_control
+        if control is not None and control.enabled:
+            on, off, _ = control.window()
+            if on is not None:
+                timed = [(p.split(" · ")[0], p) for p in parts]
+                timed += [(f"{on:%H:%M}", f"{on:%H:%M} · CO₂ on"), (f"{off:%H:%M}", f"{off:%H:%M} · CO₂ off")]
+                # CO₂ on before a light step at the same minute, CO₂ off after it
+                order = {"CO₂ on": 0, "CO₂ off": 2}
+                parts = [p for _, p in sorted(timed, key=lambda tp: (tp[0], order.get(tp[1].split(" · ", 1)[1], 1)))]
         summary = " | ".join(parts)
         acc = self._device.acclimation
         if acc is not None and acc.running:
@@ -164,10 +198,15 @@ class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {
+        attrs = {
             f"step_{i + 1}": self._scheduler.describe(step)
             for i, step in enumerate(self._scheduler.steps)
         }
+        control = self._device.co2_control
+        if control is not None and control.enabled:
+            on, off, why = control.window()
+            attrs["co2"] = why if on is None else f"on {on:%H:%M}, off {off:%H:%M}"
+        return attrs
 
 
 class WeekAquaPower(WeekAquaEntity, SensorEntity):

@@ -87,6 +87,21 @@ class CO2Control:
             note = f" (shortened to the {self.max_hours:g} h maximum)"
         return on, off, f"{on:%H:%M}–{off:%H:%M}{note}"
 
+    def next_event(self, now: datetime | None = None) -> tuple[datetime, str] | None:
+        """(when, 'on' or 'off') of the next CO₂ switch, today or in the next days."""
+        if not self.enabled:
+            return None
+        now = now or dt_util.now()
+        for offset in range(8):
+            on, off, _ = self.window(now.date() + timedelta(days=offset))
+            if on is None:
+                continue
+            if now < on:
+                return on, "on"
+            if now < off:
+                return off, "off"
+        return None
+
     def in_window(self, now: datetime | None = None) -> bool:
         now = now or dt_util.now()
         on, off, _ = self.window(now.date())

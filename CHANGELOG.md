@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b9
+
+- With CO₂ control on, the CO₂ switches are part of the schedule sensors: **All steps** shows them in the timeline (e.g. `11:00 · CO₂ on | 14:00 · On · Chat GPT Max 60% | 20:00 · CO₂ off | 21:00 · Off`), and **Next step** shows a CO₂ switch when it comes next (with a CO₂ icon). If a CO₂ switch and a light step happen in the same minute, the light step is shown with the CO₂ switch in its `also` attribute.
+
 ## 0.10.0b8
 
 - **Configure** is grouped: **Presets** (add, edit, remove), **Schedule** (add or update a step, remove steps; shows the current schedule), **Acclimation**, **CO₂**, **Maintenance and photo modes**, and **Light settings** (fade smoothness and curve, power limit, slider or number input).
