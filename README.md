@@ -75,7 +75,7 @@ Your presets appear at the top of the **Preset** picker (most recently used firs
 
 ## Built-in schedule
 
-Under **Configure → Add or update a schedule step**, choose a time, a preset (or *Off*), a brightness, a fade duration and the days. Each step can also use its own fade curve and smoothness instead of the general fade settings. Saving a step at an existing time replaces it. Example photoperiod:
+Under **Configure → Add or update a schedule step**, choose a time, a preset (or *Off*), a brightness, a fade duration and the days. **On** steps start fading in at their time; **Off** steps are fully off at their time, with the fade starting earlier, so the light period runs from the On time to the Off time. Each step can also use its own fade curve and smoothness instead of the general fade settings. Saving a step at an existing time replaces it. Example photoperiod:
 
 | Time | Preset | Fade | Days |
 |---|---|---|---|
@@ -83,7 +83,7 @@ Under **Configure → Add or update a schedule step**, choose a time, a preset (
 | 13:00 | White 100 % | 30 min | every day |
 | 21:00 | Off | 60 min | every day |
 
-- Sensors **All steps**, **Current step** and **Next step** show the schedule on the device page. The step sensors' icons show what a step does: sunrise (on after off), palette (color change while on) or sunset (off).
+- Sensors **All steps**, **Current step** and **Next step** show the schedule on the device page, including the actual channel values of On steps (`channels` attribute). The step sensors' icons show what a step does: sunrise (on after off), palette (color change while on) or sunset (off).
 - With `info` logging (see Troubleshooting), every step logs what it does: preset and channel values, fan, fade duration, curve, smoothness, number of steps and the time between them.
 - The **Schedule** switch pauses it. Turning it back on puts the light where the schedule should be right now (continuing a fade in progress).
 - After a Home Assistant restart the light is also brought back in line with the schedule.

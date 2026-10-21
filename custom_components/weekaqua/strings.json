@@ -114,7 +114,7 @@
       },
       "add_schedule": {
         "title": "Add or update a schedule step",
-        "description": "At this time the light fades to the chosen preset (or off). Saving a step at a time that already exists replaces it.\n\nCurrent schedule:\n{steps}",
+        "description": "On steps start fading in at their time. Off steps are fully off at their time: their fade starts earlier (e.g. Off at 21:00 with a 60 min fade starts dimming at 20:00). Saving a step at a time that already exists replaces it.\n\nCurrent schedule:\n{steps}",
         "data": {
           "time": "Time",
           "target": "Preset",
@@ -126,7 +126,7 @@
         },
         "data_description": {
           "brightness": "Ignored for Off.",
-          "fade": "0 = switch instantly.",
+          "fade": "On: how long the sunrise takes from the step's time. Off: how long before the step's time the sunset starts. 0 = switch instantly.",
           "curve": "Only used when the step fades.",
           "smoothness": "Only used when the step fades."
         }
@@ -216,7 +216,8 @@
       "name_exists": "You already have a preset with this name. Use Edit a preset to change it.",
       "cannot_apply": "Couldn't reach the light to show the preset (is the phone app connected?). Untick Show on the light now to just save it.",
       "step_zero": "With a step of 0 the program would never reach your normal schedule.",
-      "nothing_to_do": "Start brightness is 100 % and the light period isn't shortened, so there's nothing to do."
+      "nothing_to_do": "Start brightness is 100 % and the light period isn't shortened, so there's nothing to do.",
+      "fade_before_midnight": "This Off step's fade would have to start before midnight. Use a later time or a shorter fade."
     },
     "abort": {
       "loaded": "{name} is now on the light. Adjust it with the sliders on the device page (the Power sensor shows the total live), then open Configure → Edit a preset → {name} → Save what the light shows now into it.",

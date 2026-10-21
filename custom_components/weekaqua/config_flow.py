@@ -177,8 +177,11 @@ class WeekAquaOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
+            hh, mm = (int(x) for x in user_input["time"].split(":")[:2])
             if not user_input["days"]:
                 errors["days"] = "no_days"
+            elif user_input["target"] == "__off__" and hh * 60 + mm < float(user_input.get("fade", 0)):
+                errors["fade"] = "fade_before_midnight"
             else:
                 step = {
                     "time": user_input["time"][:5],
@@ -331,6 +334,11 @@ class WeekAquaOptionsFlow(OptionsFlow):
         status = acc.summary()
         if acc.running and acc.ends():
             status += f" (back to normal on {acc.ends():%d %b %Y})"
+        if acc.running:
+            sched = device.scheduler
+            for s in sched.steps:
+                if s["target"] != "__off__":
+                    status += f"\n• {s['time']} {s['target']} at {s.get('brightness', 100) * acc.brightness() / 100:g}%: {sched.describe_levels(s)}"
         has_off = any(s["target"] == "__off__" for s in self._steps())
         return self.async_show_form(
             step_id="acclimation",

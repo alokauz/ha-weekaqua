@@ -59,6 +59,7 @@ Installed by users through HACS from this repository. Owner: Flint.
   *smoothness* = shortest time between commands; entity states update at most
   every 30 s during a fade (recorder database size). Any manual change cancels
   a fade. A fade retries its final level if the last steps failed.
+- Step timing: On steps start fading in at their time; Off steps are fully off at their time (fade starts `fade` minutes earlier, shortened if it would overlap the previous step's fade). `Scheduler.effective_time` = target time (with acclimation), `run_window`/`run_time`/`run_fade` = when and how long it actually runs.
 - Schedule steps are keyed by time (saving the same time replaces a step).
   Failed steps retry every 30 s for 10 min. After HA starts, the light is put
   where the schedule says (continuing a fade). Not on reloads.

@@ -255,20 +255,22 @@ async def test_schedule(hass, client, freezer):
     await hass.async_block_till_done(wait_background_tasks=True)
     out = sent(client)
     assert out[-1] == "FBF95FBC5F005555" and len(out) > 10          # 0x77*.8, 0xEB*.8
-    # Wednesday: the weekend-only 12:00 step is skipped, next is 21:00
-    assert hass.states.get(nxt).attributes["step"].startswith("21:00 · Off")
+    # Wednesday: the weekend-only 12:00 step is skipped, next is the 21:00 Off,
+    # whose 60-min sunset starts at 20:00 so the light is off at 21:00
+    assert hass.states.get(nxt).attributes["step"] == "21:00 · Off · fade 60 min from 20:00 · every day"
+    assert dt_util.as_local(dt_util.parse_datetime(hass.states.get(nxt).state)).strftime("%H:%M") == "20:00"
 
-    # Schedule switched off: 21:00 does nothing
+    # Schedule switched off: the 20:00 sunset start does nothing
     await hass.services.async_call("switch", "turn_off", {"entity_id": sw}, blocking=True)
     client.write_gatt_char.reset_mock()
-    freezer.move_to(datetime(2026, 10, 14, 21, 0, 0, tzinfo=tz))
+    freezer.move_to(datetime(2026, 10, 14, 20, 0, 0, tzinfo=tz))
     async_fire_time_changed(hass)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert sent(client) == []
     assert hass.states.get(nxt).state == "unknown"
 
-    # Switched back on at 21:30: catches up, continuing the 60-min fade-out (30 min left)
-    freezer.move_to(datetime(2026, 10, 14, 21, 30, 0, tzinfo=tz))
+    # Switched back on at 20:30: catches up, continuing the sunset (30 min left, off at 21:00)
+    freezer.move_to(datetime(2026, 10, 14, 20, 30, 0, tzinfo=tz))
     await hass.services.async_call("switch", "turn_on", {"entity_id": sw}, blocking=True)
     await hass.async_block_till_done(wait_background_tasks=True)
     out = sent(client)
@@ -479,7 +481,7 @@ async def test_schedule_step_fade_overrides(hass, client, freezer):
     st = hass.states.get("switch.b3_0_l600pro_71_schedule").attributes["steps"]
     print(st)
     assert st[0] == "08:00 · On · White 100% · fade 45 min (linear, coarse) · every day"
-    assert st[1] == "09:00 · Off · fade 45 min · every day"
+    assert st[1] == "09:00 · Off · fade 45 min from 08:15 · every day"
 
     # Run the 08:00 step on a fake clock: coarse => <= 91 commands, linear => half-way ~ half
     clock = {"t": 0.0}
@@ -546,7 +548,7 @@ async def test_recent_presets_sensors_and_logs(hass, client, freezer, caplog):
     assert steps.attributes["step_2"] == "15:00 · On · Green 100% · fade 60 min (linear, coarse) · every day"
     cur = hass.states.get("sensor.b3_0_l600pro_71_current_step")
     print(cur.state)
-    assert cur.state == "21:00 · Off · fade 60 min · every day"
+    assert cur.state == "21:00 · Off · fade 60 min from 20:00 · every day"
 
     # Run the 00:59 step and check the log explains everything
     await hass.services.async_call("light", "turn_off", {"entity_id": "light.b3_0_l600pro_71"}, blocking=True)
@@ -836,4 +838,57 @@ async def test_preset_headroom_and_live_editing(hass, client):
     assert res["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
     assert entry.options["presets"]["Chat GPT"] == {"levels": [120, 235, 120, 141], "fan": 40}
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_off_time_is_end_and_acclimation_channels(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "15:00", "target": "Nature", "brightness": 100, "fade": 60, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 60, "days": every}]
+    freezer.move_to(datetime(2026, 10, 16, 17, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps, "acclimation": {"start_brightness": 70, "brightness_step": 10, "interval_days": 7, "shorten": 60, "shorten_step": 30}})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sched = entry.runtime_data.scheduler
+
+    # Normal schedule: Off at 21:00 means the sunset runs 20:00-21:00
+    assert sched.run_time(steps[1]).strftime("%H:%M") == "20:00" and sched.run_fade(steps[1]) == 60
+
+    await entry.runtime_data.acclimation.async_start()
+    await hass.async_block_till_done()
+    # Acclimation 1 h shorter: off at 20:00, sunset from 19:00
+    assert sched.effective_time(steps[1]).strftime("%H:%M") == "20:00"
+    assert sched.run_time(steps[1]).strftime("%H:%M") == "19:00"
+    nxt = hass.states.get("sensor.b3_0_l600pro_71_next_step")
+    assert nxt.attributes["step"] == "20:00 (acclimation, normally 21:00) · Off · fade 60 min from 19:00 · every day"
+    assert dt_util.as_local(dt_util.parse_datetime(nxt.state)).strftime("%H:%M") == "19:00"
+
+    # The actual channel values of the current iteration
+    cur = hass.states.get("sensor.b3_0_l600pro_71_current_step")
+    print(cur.attributes)
+    assert cur.attributes["channels"] == "R 35% G 70% B 35% UV 0% · power 61%"
+    acc = hass.states.get("sensor.b3_0_l600pro_71_acclimation")
+    assert acc.attributes["on_steps"] == {"15:00 Nature 70%": "R 35% G 70% B 35% UV 0% · power 61%"}
+
+    # An Off step whose sunset would overlap the sunrise is shortened, still ending on time
+    overlap = [{"time": "15:00", "target": "Nature", "brightness": 100, "fade": 60, "days": every},
+               {"time": "16:30", "target": "__off__", "brightness": 100, "fade": 60, "days": every}]
+    await entry.runtime_data.acclimation.async_stop()
+    sched.steps = overlap
+    assert sched.run_window(overlap[1]) == (16 * 60, 30)       # starts after the sunrise ends, 30 min
+    assert sched.describe(overlap[1]) == "16:30 · Off · fade 30 min from 16:00 · every day"
+
+    # The form refuses an Off fade that would start before midnight
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_schedule"})
+    bad = await hass.config_entries.options.async_configure(flow["flow_id"],
+        {"time": "00:30:00", "target": "__off__", "brightness": 100, "fade": 60, "curve": "default", "smoothness": "default", "days": [str(i) for i in every]})
+    assert bad["errors"] == {"fade": "fade_before_midnight"}
     assert await hass.config_entries.async_unload(entry.entry_id)

@@ -2,6 +2,12 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b5
+
+- **Off steps now end at their time**: `21:00 · Off · fade 60 min` means the light is fully off at 21:00, and the sunset starts at 20:00. On steps still start fading in at their time, so a light period runs from the On time to the Off time, like most aquarium lights. **If you have Off steps with a fade, they now finish earlier than before**: move them later by the fade time to keep the old timing.
+- Off steps show when their fade starts (`fade 60 min from 20:00`). A sunset that would overlap the previous step's fade is shortened so it still ends on time. The form refuses an Off fade that would have to start before midnight.
+- The actual channel values of each On step are shown: **Current step** and **Next step** have a `channels` attribute (e.g. `R 35% G 70% B 35% UV 0% · power 61%`), and during acclimation the **Acclimation** sensor and **Configure → Acclimation** list what each On step uses in the current iteration.
+
 ## 0.10.0b4
 
 - While acclimation runs, **Current step** and **All steps** show what actually happens, like **Next step** already did: the moved Off time and the reduced brightness, with the normal values alongside, e.g. `15:00 · On · Nature 70% (acclimation, normally 100%)`.

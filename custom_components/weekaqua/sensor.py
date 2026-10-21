@@ -75,7 +75,10 @@ class WeekAquaNextStep(WeekAquaEntity, SensorEntity):
         step, when = self._scheduler.next_step()
         if not self._scheduler.enabled or step is None:
             return {}
-        return {"step": self._scheduler.describe(step), "kind": self._scheduler.step_kind(step, when)}
+        attrs = {"step": self._scheduler.describe(step), "kind": self._scheduler.step_kind(step, when)}
+        if step["target"] != OFF_TARGET:
+            attrs["channels"] = self._scheduler.describe_levels(step)
+        return attrs
 
 
 class WeekAquaCurrentStep(WeekAquaEntity, SensorEntity):
@@ -115,7 +118,10 @@ class WeekAquaCurrentStep(WeekAquaEntity, SensorEntity):
         step, when = self._scheduler.last_step()
         if not self._scheduler.enabled or step is None:
             return {}
-        return {"started": when.isoformat(), "kind": self._scheduler.step_kind(step, when)}
+        attrs = {"started": when.isoformat(), "kind": self._scheduler.step_kind(step, when)}
+        if step["target"] != OFF_TARGET:
+            attrs["channels"] = self._scheduler.describe_levels(step)
+        return attrs
 
 
 class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
@@ -220,4 +226,11 @@ class WeekAquaAcclimationSensor(WeekAquaEntity, SensorEntity):
             "back_to_normal": ends.isoformat() if ends else None,
             "started": acc.state["started"],
             "paused": acc.paused,
+            # What each On step uses now, e.g. "15:00 Nature 70%": "R 36% G 70% B 36% UV 0% · power 61%"
+            "on_steps": {
+                f"{s['time']} {s['target']} {s.get('brightness', 100) * acc.brightness() / 100:g}%":
+                    self._device.scheduler.describe_levels(s)
+                for s in self._device.scheduler.steps
+                if s["target"] != OFF_TARGET
+            },
         }

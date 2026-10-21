@@ -20,6 +20,8 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
 
+from .const import PRESETS, limit_power, total_power
+
 from .device import WeekAquaDevice
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,6 +60,11 @@ def describe_step(step: dict[str, Any], presets: dict | None = None) -> str:
             if label
         ]
         fade = f" · fade {step['fade']:g} min" + (f" ({', '.join(extras)})" if extras else "")
+        if step["target"] == OFF_TARGET:
+            # Off steps are fully off at their time; the fade starts earlier
+            t = step_time(step)
+            start = max(0, t.hour * 60 + t.minute - int(round(step["fade"])))
+            fade += f" from {start // 60:02d}:{start % 60:02d}"
     days = sorted(step.get("days", ALL_DAYS))
     if days == ALL_DAYS:
         day_text = "every day"
@@ -96,22 +103,74 @@ class WeekAquaScheduler:
         for listener in list(self._listeners):
             listener()
 
+    @staticmethod
+    def _minutes(t: time) -> int:
+        return t.hour * 60 + t.minute
+
+    def _previous(self, step: dict[str, Any]) -> dict[str, Any] | None:
+        earlier = [s for s in self.steps if step_time(s) < step_time(step)]
+        return earlier[-1] if earlier else None
+
     def effective_time(self, step: dict[str, Any]) -> time:
-        """The step's time today, with acclimation moving Off steps earlier."""
+        """The step's time today: when an On step starts, when an Off step is fully off.
+
+        Acclimation moves Off steps earlier, but never so early that the light
+        would be off before the previous step's fade has ended.
+        """
         normal = step_time(step)
         acc = self.acclimation
         if acc is None or step["target"] != OFF_TARGET or not acc.shorter_minutes():
             return normal
-        minutes = normal.hour * 60 + normal.minute - acc.shorter_minutes()
-        # Not before the previous step (and its fade) has finished
-        earlier = [s for s in self.steps if step_time(s) < normal]
-        if earlier:
-            prev = earlier[-1]
-            prev_t = step_time(prev)
-            floor = prev_t.hour * 60 + prev_t.minute + int(prev.get("fade", 0)) + 1
-            minutes = max(minutes, floor)
-        minutes = max(0, min(int(minutes), normal.hour * 60 + normal.minute))
+        minutes = self._minutes(normal) - acc.shorter_minutes()
+        if (prev := self._previous(step)) is not None:
+            prev_start, prev_fade = self.run_window(prev)
+            minutes = max(minutes, prev_start + prev_fade + 1)
+        minutes = max(0, min(int(minutes), self._minutes(normal)))
         return time(minutes // 60, minutes % 60)
+
+    def run_window(self, step: dict[str, Any]) -> tuple[int, int]:
+        """(start minute of the day, fade minutes) as the step actually runs.
+
+        On steps start fading in at their time. Off steps start fading out
+        `fade` minutes before their time, so the light is off at that time; if
+        that would overlap the previous step's fade, the fade is shortened.
+        """
+        target = self._minutes(self.effective_time(step))
+        fade = int(round(step.get("fade", 0)))
+        if step["target"] != OFF_TARGET or not fade:
+            return target, fade
+        start = target - fade
+        if (prev := self._previous(step)) is not None:
+            prev_start, prev_fade = self.run_window(prev)
+            start = max(start, prev_start + prev_fade)
+        start = max(0, min(start, target))
+        return start, target - start
+
+    def run_time(self, step: dict[str, Any]) -> time:
+        start, _ = self.run_window(step)
+        return time(start // 60, start % 60)
+
+    def run_fade(self, step: dict[str, Any]) -> float:
+        """Fade in minutes as the step actually runs."""
+        return float(self.run_window(step)[1]) if step["target"] == OFF_TARGET else float(step.get("fade", 0))
+
+    def step_levels(self, step: dict[str, Any]) -> tuple[int, int, int, int]:
+        """The channel levels the step ends at (brightness, acclimation, power limit)."""
+        if step["target"] == OFF_TARGET or step["target"] not in self.device.presets:
+            return (0, 0, 0, 0)
+        scale = step.get("brightness", 100) / 100 * self.acclimation_factor()
+        levels = tuple(round(v * scale) for v in self.device.presets[step["target"]])
+        is_app_preset = levels in {tuple(p) for p in PRESETS.values()}
+        if self.device.power_limit and total_power(levels) > 100.05 and not is_app_preset:
+            levels = limit_power(levels)
+        return levels
+
+    def describe_levels(self, step: dict[str, Any]) -> str:
+        """'R 36% G 70% B 36% UV 0% · power 61%' for an On step."""
+        from .device import describe_levels
+
+        levels = self.step_levels(step)
+        return f"{describe_levels(levels)} · power {total_power(levels):.0f}%"
 
     @callback
     def reschedule(self) -> None:
@@ -123,7 +182,7 @@ class WeekAquaScheduler:
     @callback
     def start(self) -> None:
         for step in self.steps:
-            at = self.effective_time(step)
+            at = self.run_time(step)
             self._unsubs.append(
                 async_track_time_change(
                     self.hass, partial(self._fire, step), hour=at.hour, minute=at.minute, second=0
@@ -141,7 +200,7 @@ class WeekAquaScheduler:
             _LOGGER.info("Schedule is switched off, skipping step %s", step["time"])
         elif now.weekday() in step.get("days", ALL_DAYS):
             self.hass.async_create_background_task(
-                self._run(step, step.get("fade", 0) * 60),
+                self._run(step, self.run_fade(step) * 60),
                 f"weekaqua schedule {step['time']}",
             )
         self._notify()  # the next step has moved on
@@ -217,7 +276,7 @@ class WeekAquaScheduler:
             smooth_text = SMOOTHNESS_NAMES.get(interval, f"{interval:g} s") + (
                 " (this step)" if smooth else " (general setting)"
             )
-            planned = step.get("fade", 0) * 60
+            planned = self.run_fade(step) * 60
             fade = f"fading over {describe_duration(transition)}"
             if abs(planned - transition) > 1:
                 fade += f" (remaining of {describe_duration(planned)})"
@@ -230,10 +289,12 @@ class WeekAquaScheduler:
         )
 
     def describe(self, step: dict[str, Any]) -> str:
-        """describe_step with what acclimation actually does to the step today."""
-        text = describe_step(step, self.device.presets)
-        parts = text.split(" · ")
+        """describe_step with what actually happens today (acclimation, shortened fades)."""
         at = self.effective_time(step).strftime("%H:%M")
+        actual = {**step, "time": at}
+        if step["target"] == OFF_TARGET and step.get("fade"):
+            actual["fade"] = self.run_fade(step)
+        parts = describe_step(actual, self.device.presets).split(" · ")
         if at != step["time"]:
             parts[0] = f"{at} (acclimation, normally {step['time']})"
         factor = self.acclimation_factor()
@@ -272,7 +333,7 @@ class WeekAquaScheduler:
             for step in steps:
                 if day.weekday() not in step.get("days", ALL_DAYS):
                     continue
-                when = datetime.combine(day, self.effective_time(step), tzinfo=now.tzinfo)
+                when = datetime.combine(day, self.run_time(step), tzinfo=now.tzinfo)
                 if (backwards and when <= now) or (not backwards and when > now):
                     yield step, when
 
@@ -301,7 +362,7 @@ class WeekAquaScheduler:
         step, when = self.last_step()
         if step is None:
             return
-        remaining = step.get("fade", 0) * 60 - (dt_util.now() - when).total_seconds()
+        remaining = self.run_fade(step) * 60 - (dt_util.now() - when).total_seconds()
         _LOGGER.info("Catching up with the schedule (step at %s)", step["time"])
         await self._run(step, max(0.0, remaining) if remaining > 1 else 0)
 
