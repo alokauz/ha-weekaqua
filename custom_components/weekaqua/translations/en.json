@@ -95,7 +95,7 @@
       },
       "add_preset": {
         "title": "Add a preset",
-        "description": "The values start at what the light is showing now (total power {power} %), so the easiest way is to set the light up on the device page first. Leave Fan empty if the preset shouldn't change the fan. Total power must stay at or below 100 %.",
+        "description": "The values start at what the light is showing now (total power {power} %). {headroom}\n\nTip: for a live power reading, set the light up with the sliders on the device page while watching the Power sensor, then come back here. Leave Fan empty if the preset shouldn't change the fan.",
         "data": {
           "name": "Name",
           "red": "1. R",
@@ -161,14 +161,15 @@
       },
       "edit_preset": {
         "title": "Edit a preset",
-        "description": "Choose the preset to edit.",
+        "description": "Choose the preset, and how you'd like to edit it. For a live power reading, load it onto the light, adjust it with the sliders on the device page while watching the Power sensor, then come back and choose Save what the light shows now into it.",
         "data": {
-          "preset": "Preset"
+          "preset": "Preset",
+          "how": "How"
         }
       },
       "edit_preset_values": {
         "title": "Edit {name}",
-        "description": "Now: {current}\nUsed by: {used_by}\n\nChange the name to rename it (schedule steps follow). Leave Fan empty if the preset shouldn't change the fan.",
+        "description": "Now: {current}\nUsed by: {used_by}\n{headroom}\n\nChange the name to rename it (schedule steps follow). Leave Fan empty if the preset shouldn't change the fan.",
         "data": {
           "name": "Name",
           "red": "1. R",
@@ -198,17 +199,29 @@
           "shorten": "Off steps run this much earlier at the start (0 = keep the normal light period).",
           "shorten_step": "How much longer the light period gets at each step."
         }
+      },
+      "power_over": {
+        "title": "Over the power limit",
+        "description": "These values add up to {power} % total power ({asked}), but the light is limited to 100 %.\n\nScaled down: {scaled} = {scaled_power} %, the same colour slightly dimmer.",
+        "menu_options": {
+          "power_scale": "Scale all channels down to 100 %",
+          "power_back": "Go back and change the values"
+        }
       }
     },
     "error": {
       "name_empty": "Enter a name.",
       "name_builtin": "That name is used by one of the app's presets. Choose another.",
       "no_days": "Choose at least one day.",
-      "too_much_power": "These values add up to more than 100 % total power. Lower one or more channels (R counts 39 %, G 41 %, B 53 %, UV 11 % at full).",
       "name_exists": "You already have a preset with this name. Use Edit a preset to change it.",
       "cannot_apply": "Couldn't reach the light to show the preset (is the phone app connected?). Untick Show on the light now to just save it.",
       "step_zero": "With a step of 0 the program would never reach your normal schedule.",
       "nothing_to_do": "Start brightness is 100 % and the light period isn't shortened, so there's nothing to do."
+    },
+    "abort": {
+      "loaded": "{name} is now on the light. Adjust it with the sliders on the device page (the Power sensor shows the total live), then open Configure → Edit a preset → {name} → Save what the light shows now into it.",
+      "cannot_apply": "Couldn't reach the light (is the phone app connected?). Nothing was changed.",
+      "light_off": "The light is off, so there's nothing to save. Turn it on or load the preset first."
     }
   }
 }

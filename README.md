@@ -67,7 +67,8 @@ Like the app's *Total power* slider, the integration keeps the light's total pow
 Under **Settings → Devices & services → Week Aqua → Configure**:
 
 - **Add a preset**: the values start at what the light shows now, so the easiest way is to set the light up on the device page first, then save it with a name. Leave *Fan* empty if the preset shouldn't change the fan.
-- **Edit a preset**: pick a preset (the list shows its channels, fan and total power) and change its values or its name. Schedule steps follow a renamed preset. Tick **Show on the light now** to see the result when you save.
+- **Edit a preset**: pick a preset (the list shows its channels, fan and total power), then either change its values or name in the form (schedule steps follow a renamed preset; tick **Show on the light now** to see the result), or **load it onto the light**, adjust it live on the device page while the **Power** sensor shows the total, and **save what the light shows** back into the preset.
+- The forms show how far each channel can go up before the power limit. If you go over it anyway, you can scale all channels down to 100 % or go back.
 - **Remove presets**: pick the ones to delete.
 
 Your presets appear at the top of the **Preset** picker (most recently used first) and as light effects (`effect: My Reef`), including with `transition`.

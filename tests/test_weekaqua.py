@@ -596,7 +596,20 @@ async def test_power_limit(hass, client):
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_preset"})
     res = await hass.config_entries.options.async_configure(flow["flow_id"],
         {"name": "Blinding", "red": 100, "green": 100, "blue": 100, "uv": 100})
-    assert res["errors"] == {"base": "too_much_power"}
+    # Not a dead end: the total is shown, with "scale down" or "go back"
+    assert res["type"] is FlowResultType.MENU and res["step_id"] == "power_over"
+    assert res["description_placeholders"]["power"] == "144"
+    assert res["description_placeholders"]["scaled"] == "R 69% G 69% B 69% UV 69%"
+    back = await hass.config_entries.options.async_configure(res["flow_id"], {"next_step_id": "power_back"})
+    assert back["step_id"] == "add_preset"
+    vals = {str(k): k.default() for k in back["data_schema"].schema if callable(getattr(k, "default", None))}
+    assert vals["name"] == "Blinding" and vals["red"] == 100           # your values are kept
+    res = await hass.config_entries.options.async_configure(back["flow_id"],
+        {"name": "Blinding", "red": 100, "green": 100, "blue": 100, "uv": 100})
+    done = await hass.config_entries.options.async_configure(res["flow_id"], {"next_step_id": "power_scale"})
+    assert done["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert entry.options["presets"]["Blinding"]["levels"] == [163, 163, 163, 163]
 
     # Turning the limit off (Configure -> Power limit) allows it
     flow = await hass.config_entries.options.async_init(entry.entry_id)
@@ -783,4 +796,39 @@ async def test_acclimation(hass, client, freezer):
     assert hass.states.get(switch).state == "off"
     assert sched.effective_time(steps[1]).strftime("%H:%M") == "21:00"
     assert await run_on_step() == "FBF977EB77005555"     # 100 % again
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_preset_headroom_and_live_editing(hass, client):
+    options = {"presets": {"Chat GPT": {"levels": [120, 235, 120, 70], "fan": 40}}}
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+                            data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options=options)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    async def open_edit():
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        return await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "edit_preset"})
+
+    # Edit here: headroom for each channel, from the preset's values
+    flow = await open_edit()
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"preset": "Chat GPT", "how": "form"})
+    print(flow["description_placeholders"]["headroom"])
+    assert flow["description_placeholders"]["headroom"] == "With the other channels as shown, R up to 73%, G up to 100%, B up to 67%, UV up to 100%."
+
+    # Load onto the light -> adjust live with a slider -> save the light into the preset
+    flow = await open_edit()
+    client.write_gatt_char.reset_mock()
+    res = await hass.config_entries.options.async_configure(flow["flow_id"], {"preset": "Chat GPT", "how": "load"})
+    assert res["type"] is FlowResultType.ABORT and res["reason"] == "loaded"
+    assert sent(client) == ["FC5E555555555555", "FBF978EB78465555"]
+    assert hass.states.get("sensor.b3_0_l600pro_71_power").state == "91.3"
+    await hass.services.async_call("number", "set_value", {"entity_id": "number.b3_0_l600pro_71_4_uv", "value": 60}, blocking=True)
+    assert hass.states.get("sensor.b3_0_l600pro_71_power").state == "94.6"   # live
+    flow = await open_edit()
+    res = await hass.config_entries.options.async_configure(flow["flow_id"], {"preset": "Chat GPT", "how": "save_light"})
+    assert res["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert entry.options["presets"]["Chat GPT"] == {"levels": [120, 235, 120, 141], "fan": 40}
     assert await hass.config_entries.async_unload(entry.entry_id)

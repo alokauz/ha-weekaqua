@@ -2,6 +2,12 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b3
+
+- Preset forms show how far each channel can go up before reaching the power limit, e.g. "R up to 73%, G up to 100%, B up to 67%, UV up to 100%".
+- Going over the power limit is no longer a dead end: you see the total (e.g. 114 %) and can **scale all channels down to 100 %** (same colour, slightly dimmer) or **go back** with your values kept.
+- **Edit a preset** can **load the preset onto the light**, so you can adjust it live on the device page while the **Power** sensor shows the total, and then **save what the light shows** into the preset.
+
 ## 0.10.0b2
 
 - **Acclimation** (Configure): for a new tank, new plants or new livestock. The schedule starts at lower brightness (e.g. 60 %) and a shorter light period (Off steps up to e.g. 2 h earlier), and steps up every few days until it's back at your normal schedule. It never goes beyond your normal schedule and finishes by itself.

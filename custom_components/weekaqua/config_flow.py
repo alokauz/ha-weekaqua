@@ -45,9 +45,12 @@ from .const import (
     CONF_SCHEDULE,
     DOMAIN,
     MAX_LEVEL,
+    POWER_WEIGHTS,
     PRESETS,
+    limit_power,
     total_power,
 )
+from .device import describe_levels
 from .acclimation import DEFAULTS as ACCLIMATION_DEFAULTS, Acclimation, describe_minutes
 from .schedule import ALL_DAYS, DAY_NAMES, OFF_TARGET, describe_step, step_time
 
@@ -141,6 +144,8 @@ class WeekAquaOptionsFlow(OptionsFlow):
     """The Configure menu: presets, schedule and settings."""
 
     _editing: str = ""
+    _prefill: dict[str, Any] | None = None
+    _pending: dict[str, Any] = {}
 
     def _custom(self) -> dict[str, dict]:
         return dict(self.config_entry.options.get(CONF_PRESETS, {}))
@@ -425,6 +430,18 @@ class WeekAquaOptionsFlow(OptionsFlow):
             text += f" · fan {preset['fan']:g}%"
         return f"{text} · power {total_power(levels):.0f}%"
 
+    def _headroom(self, values: dict[str, Any]) -> str:
+        """How far each channel can go up, with the others as they are."""
+        if not self.config_entry.options.get(CONF_POWER_LIMIT, True):
+            return "Power limit is off."
+        fractions = [values.get(key, 0) / 100 for key in CHANNELS]
+        parts = []
+        for i, (label, weight) in enumerate(zip(("R", "G", "B", "UV"), POWER_WEIGHTS)):
+            others = sum(w * f for j, (w, f) in enumerate(zip(POWER_WEIGHTS, fractions)) if j != i)
+            limit = max(0.0, min(1.0, (1 - others) / weight))
+            parts.append(f"{label} up to {int(limit * 100)}%")
+        return "With the other channels as shown, " + ", ".join(parts) + "."
+
     def _preset_schema(
         self, values: dict[str, Any], name: str, with_apply: bool
     ) -> vol.Schema:
@@ -454,9 +471,15 @@ class WeekAquaOptionsFlow(OptionsFlow):
             errors[CONF_NAME] = "name_builtin"
         elif name != editing and name in self._custom():
             errors[CONF_NAME] = "name_exists"
-        elif self.config_entry.options.get(CONF_POWER_LIMIT, True) and total_power(levels) > 100.05:
-            errors["base"] = "too_much_power"
         return errors, name, levels
+
+    def _over_limit(self, levels: list[int]) -> bool:
+        return self.config_entry.options.get(CONF_POWER_LIMIT, True) and total_power(levels) > 100.05
+
+    async def _finish_add(self, name: str, levels: list[int], fan: float | None) -> ConfigFlowResult:
+        custom = self._custom()
+        custom[name] = {"levels": levels, "fan": fan}
+        return self._save(**{CONF_PRESETS: custom})
 
     @staticmethod
     def _as_form_values(preset: dict[str, Any]) -> dict[str, Any]:
@@ -472,36 +495,66 @@ class WeekAquaOptionsFlow(OptionsFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             errors, name, levels = self._check_preset(user_input, None)
+            if not errors and self._over_limit(levels):
+                return await self._ask_power(user_input, "add_preset", name, levels)
             if not errors:
-                custom = self._custom()
-                custom[name] = {"levels": levels, "fan": user_input.get(CONF_FAN)}
-                return self._save(**{CONF_PRESETS: custom})
+                return await self._finish_add(name, levels, user_input.get(CONF_FAN))
 
         device = self.config_entry.runtime_data
-        values = user_input or self._as_form_values(
+        prefill, self._prefill = self._prefill, None
+        values = user_input or prefill or self._as_form_values(
             {"levels": list(device.levels), "fan": device.fan}
         )
         levels = [round(values.get(key, 0) / 100 * MAX_LEVEL) for key in CHANNELS]
         return self.async_show_form(
             step_id="add_preset",
-            data_schema=self._preset_schema(values, (user_input or {}).get(CONF_NAME, ""), False),
+            data_schema=self._preset_schema(values, values.get(CONF_NAME, ""), False),
             errors=errors,
-            description_placeholders={"power": f"{total_power(levels):.0f}"},
+            description_placeholders={
+                "power": f"{total_power(levels):.0f}",
+                "headroom": self._headroom(values),
+            },
         )
 
     async def async_step_edit_preset(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Pick one of your presets; the list shows each preset's values."""
+        """Pick one of your presets (the list shows its values) and how to edit it."""
         custom = self._custom()
-        if user_input is not None:
-            self._editing = user_input["preset"]
-            return await self.async_step_edit_preset_values()
         device = self.config_entry.runtime_data
+        if user_input is not None:
+            name = user_input["preset"]
+            self._editing = name
+            how = user_input.get("how", "form")
+            if how == "load":
+                preset = custom[name]
+                try:
+                    if preset.get("fan") is not None:
+                        await device.set_fan(preset["fan"])
+                    await device.set_levels(tuple(preset["levels"]))
+                except HomeAssistantError:
+                    return self.async_abort(reason="cannot_apply")
+                return self.async_abort(reason="loaded", description_placeholders={"name": name})
+            if how == "save_light":
+                levels = list(device.levels)
+                if not any(levels):
+                    return self.async_abort(reason="light_off")
+                fan = device.fan if device.fan is not None else custom[name].get("fan")
+                result = await self._finish_edit(name, levels, fan, False)
+                return result if not isinstance(result, str) else self.async_abort(reason=result)
+            return await self.async_step_edit_preset_values()
         order = [n for n in device.ordered_presets() if n in custom]
         options = [
             SelectOptionDict(value=n, label=f"{n} — {self._describe_preset(custom[n])}")
             for n in order
+        ]
+        hows = [
+            SelectOptionDict(value="form", label="Edit the values here"),
+            SelectOptionDict(value="load", label="Load it onto the light, to adjust it live on the device page"),
+            SelectOptionDict(
+                value="save_light",
+                label=f"Save what the light shows now into it ({describe_levels(device.levels)}, power {total_power(device.levels):.0f}%)",
+            ),
         ]
         return self.async_show_form(
             step_id="edit_preset",
@@ -509,7 +562,10 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 {
                     vol.Required("preset", default=order[0]): SelectSelector(
                         SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)
-                    )
+                    ),
+                    vol.Required("how", default="form"): SelectSelector(
+                        SelectSelectorConfig(options=hows, mode=SelectSelectorMode.LIST)
+                    ),
                 }
             ),
         )
@@ -519,52 +575,108 @@ class WeekAquaOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Edit the picked preset: name, channels, fan; optionally show it on the light."""
         old_name = self._editing
-        custom = self._custom()
-        preset = custom[old_name]
+        preset = self._custom()[old_name]
         errors: dict[str, str] = {}
         if user_input is not None:
             errors, name, levels = self._check_preset(user_input, old_name)
+            if not errors and self._over_limit(levels):
+                return await self._ask_power(user_input, "edit_preset_values", name, levels)
             if not errors:
-                fan = user_input.get(CONF_FAN)
-                if user_input.get(CONF_APPLY):
-                    device = self.config_entry.runtime_data
-                    try:
-                        if fan is not None:
-                            await device.set_fan(fan)
-                        await device.set_levels(tuple(levels))
-                    except HomeAssistantError:
-                        errors["base"] = "cannot_apply"
-                if not errors:
-                    # Same order as before, renamed in place
-                    updated = {
-                        (name if n == old_name else n): (
-                            {"levels": levels, "fan": fan} if n == old_name else p
-                        )
-                        for n, p in custom.items()
-                    }
-                    changes: dict[str, Any] = {CONF_PRESETS: updated}
-                    if name != old_name:
-                        # Keep schedule steps that use this preset working
-                        changes[CONF_SCHEDULE] = [
-                            {**step, "target": name} if step["target"] == old_name else step
-                            for step in self._steps()
-                        ]
-                    return self._save(**changes)
+                result = await self._finish_edit(name, levels, user_input.get(CONF_FAN), bool(user_input.get(CONF_APPLY)))
+                if isinstance(result, str):
+                    errors["base"] = result
+                else:
+                    return result
 
-        values = user_input or self._as_form_values(preset)
+        prefill, self._prefill = self._prefill, None
+        values = user_input or prefill or self._as_form_values(preset)
         used_by = [s["time"] for s in self._steps() if s["target"] == old_name]
         return self.async_show_form(
             step_id="edit_preset_values",
-            data_schema=self._preset_schema(
-                values, (user_input or {}).get(CONF_NAME, old_name), True
-            ),
+            data_schema=self._preset_schema(values, values.get(CONF_NAME, old_name), True),
             errors=errors,
             description_placeholders={
                 "name": old_name,
                 "current": self._describe_preset(preset),
                 "used_by": ", ".join(used_by) if used_by else "no schedule steps",
+                "headroom": self._headroom(values),
             },
         )
+
+    async def _finish_edit(
+        self, name: str, levels: list[int], fan: float | None, apply: bool
+    ) -> ConfigFlowResult | str:
+        """Save the edited preset (renaming in place). Returns an error key on failure."""
+        old_name = self._editing
+        if apply:
+            device = self.config_entry.runtime_data
+            try:
+                if fan is not None:
+                    await device.set_fan(fan)
+                await device.set_levels(tuple(levels))
+            except HomeAssistantError:
+                return "cannot_apply"
+        custom = self._custom()
+        updated = {
+            (name if n == old_name else n): ({"levels": levels, "fan": fan} if n == old_name else p)
+            for n, p in custom.items()
+        }
+        changes: dict[str, Any] = {CONF_PRESETS: updated}
+        if name != old_name:
+            # Keep schedule steps that use this preset working
+            changes[CONF_SCHEDULE] = [
+                {**step, "target": name} if step["target"] == old_name else step
+                for step in self._steps()
+            ]
+        return self._save(**changes)
+
+    # ---- 2. over the power limit: scale down or go back ----------------
+
+    async def _ask_power(
+        self, user_input: dict[str, Any], back_to: str, name: str, levels: list[int]
+    ) -> ConfigFlowResult:
+        self._pending = {"input": dict(user_input), "back_to": back_to, "name": name, "levels": levels}
+        scaled = list(limit_power(levels))
+        return self.async_show_menu(
+            step_id="power_over",
+            menu_options=["power_scale", "power_back"],
+            description_placeholders={
+                "power": f"{total_power(levels):.0f}",
+                "asked": describe_levels(levels),
+                "scaled": describe_levels(scaled),
+                "scaled_power": f"{total_power(scaled):.0f}",
+            },
+        )
+
+    async def async_step_power_over(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        p = self._pending
+        return await self._ask_power(p["input"], p["back_to"], p["name"], p["levels"])
+
+    async def async_step_power_scale(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        pending = self._pending
+        levels = list(limit_power(pending["levels"]))
+        fan = pending["input"].get(CONF_FAN)
+        if pending["back_to"] == "add_preset":
+            return await self._finish_add(pending["name"], levels, fan)
+        result = await self._finish_edit(pending["name"], levels, fan, bool(pending["input"].get(CONF_APPLY)))
+        if isinstance(result, str):
+            # Couldn't reach the light: back to the form, scaled values filled in
+            self._prefill = {**pending["input"], **{k: round(v / MAX_LEVEL * 100) for k, v in zip(CHANNELS, levels)}, CONF_APPLY: False}
+            return await self.async_step_edit_preset_values()
+        return result
+
+    async def async_step_power_back(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        pending = self._pending
+        self._prefill = pending["input"]
+        if pending["back_to"] == "add_preset":
+            return await self.async_step_add_preset()
+        return await self.async_step_edit_preset_values()
 
     async def async_step_remove_preset(
         self, user_input: dict[str, Any] | None = None
