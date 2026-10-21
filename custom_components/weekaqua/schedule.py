@@ -17,10 +17,13 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import (
+    async_track_point_in_utc_time,
+    async_track_time_change,
+)
 from homeassistant.util import dt as dt_util
 
-from .const import PRESETS, limit_power, total_power
+from .const import limit_power, total_power
 
 from .device import WeekAquaDevice
 
@@ -88,6 +91,11 @@ class WeekAquaScheduler:
         self.steps = sorted(steps, key=step_time)
         self.enabled = True
         self.acclimation = None  # set in __init__.py
+        self.co2 = None  # set in __init__.py
+        # Maintenance / photo mode: {"mode", "preset", "until"} while active
+        self.override: dict[str, Any] | None = None
+        self._override_timer: Callable[[], None] | None = None
+        self._co2_factor_applied = 1.0
         self._unsubs: list[Callable[[], None]] = []
         self._listeners: list[Callable[[], None]] = []
         # Bumped whenever a newer step starts, so a retrying older step gives up.
@@ -158,10 +166,9 @@ class WeekAquaScheduler:
         """The channel levels the step ends at (brightness, acclimation, power limit)."""
         if step["target"] == OFF_TARGET or step["target"] not in self.device.presets:
             return (0, 0, 0, 0)
-        scale = step.get("brightness", 100) / 100 * self.acclimation_factor()
+        scale = step.get("brightness", 100) / 100 * self.acclimation_factor() * self.co2_factor()
         levels = tuple(round(v * scale) for v in self.device.presets[step["target"]])
-        is_app_preset = levels in {tuple(p) for p in PRESETS.values()}
-        if self.device.power_limit and total_power(levels) > 100.05 and not is_app_preset:
+        if self.device.power_limit and total_power(levels) > 100.05:
             levels = limit_power(levels)
         return levels
 
@@ -198,6 +205,11 @@ class WeekAquaScheduler:
     def _fire(self, step: dict[str, Any], now: datetime) -> None:
         if not self.enabled:
             _LOGGER.info("Schedule is switched off, skipping step %s", step["time"])
+        elif self.override:
+            _LOGGER.info(
+                "%s mode is on, skipping step %s (the schedule resumes when it ends)",
+                self.override["mode"].capitalize(), step["time"],
+            )
         elif now.weekday() in step.get("days", ALL_DAYS):
             self.hass.async_create_background_task(
                 self._run(step, self.run_fade(step) * 60),
@@ -251,12 +263,17 @@ class WeekAquaScheduler:
         if step["target"] == OFF_TARGET:
             what = "to Off"
         elif step["target"] in dev.presets:
-            factor = self.acclimation_factor()
-            scale = step.get("brightness", 100) / 100 * factor
-            levels = tuple(round(v * scale) for v in dev.presets[step["target"]])
-            what = f"to preset {step['target']!r} at {step.get('brightness', 100) * factor:g}%"
-            if factor < 1:
-                what += f" (acclimation {factor * 100:g}% of {step.get('brightness', 100)}%)"
+            acc, co2 = self.acclimation_factor(), self.co2_factor()
+            normal = step.get("brightness", 100)
+            levels = self.step_levels(step)
+            what = f"to preset {step['target']!r} at {round(normal * acc * co2, 1):g}%"
+            notes = []
+            if acc < 1:
+                notes.append(f"acclimation {acc * 100:g}%")
+            if co2 < 1:
+                notes.append(f"CO₂ not ready: {self.co2.ready()[1]}, fallback {self.co2.fallback}%")
+            if notes:
+                what += f" ({'; '.join(notes)}; normally {normal}%)"
             what += f" ({describe_levels(levels)})"
             if (fan := dev.preset_fans.get(step["target"])) is not None:
                 what += f", fan {fan:g}%"
@@ -297,14 +314,19 @@ class WeekAquaScheduler:
         parts = describe_step(actual, self.device.presets).split(" · ")
         if at != step["time"]:
             parts[0] = f"{at} (acclimation, normally {step['time']})"
-        factor = self.acclimation_factor()
-        if step["target"] != OFF_TARGET and factor < 1 and len(parts) > 2:
+        acc, co2 = self.acclimation_factor(), self.co2_factor()
+        if step["target"] != OFF_TARGET and (acc < 1 or co2 < 1) and len(parts) > 2:
             normal = step.get("brightness", 100)
             missing = " (preset missing!)" if parts[2].endswith("(preset missing!)") else ""
+            why = [w for w, f in (("acclimation", acc), ("CO₂ not ready", co2)) if f < 1]
             parts[2] = (
-                f"{step['target']} {normal * factor:g}%{missing} (acclimation, normally {normal}%)"
+                f"{step['target']} {round(normal * acc * co2, 1):g}%{missing} "
+                f"({', '.join(why)}, normally {normal}%)"
             )
         return " · ".join(parts)
+
+    def co2_factor(self) -> float:
+        return self.co2.factor() if self.co2 else 1.0
 
     def acclimation_factor(self) -> float:
         return (self.acclimation.brightness() / 100) if self.acclimation else 1.0
@@ -315,7 +337,15 @@ class WeekAquaScheduler:
         if step["target"] == OFF_TARGET:
             await self.device.set_levels((0, 0, 0, 0), transition, interval, curve)
         elif step["target"] in self.device.presets:
-            scale = step.get("brightness", 100) / 100 * self.acclimation_factor()
+            co2 = self.co2_factor()
+            scale = step.get("brightness", 100) / 100 * self.acclimation_factor() * co2
+            self._co2_factor_applied = co2
+            if co2 < 1:
+                self._co2_message(
+                    f"CO₂ isn't ready ({self.co2.ready()[1]}), so the {step['time']} step runs at "
+                    f"{self.co2.fallback}% of its brightness until CO₂ has been on for "
+                    f"{self.co2.lead} minutes."
+                )
             await self.device.apply_preset(step["target"], transition, scale, interval, curve)
         else:
             _LOGGER.warning(
@@ -352,19 +382,88 @@ class WeekAquaScheduler:
             return "sunrise"
         return "change"
 
-    async def apply_current(self) -> None:
+    async def apply_current(self, min_transition: float = 0) -> None:
         """Put the light where the schedule says it should be now.
 
-        If the last step's fade is still running, continue it for the remaining time.
+        If the last step's fade is still running, continue it for the remaining
+        time; otherwise go there over `min_transition` seconds (0 = instantly).
         """
-        if not self.enabled or not self.steps:
+        if not self.enabled or not self.steps or self.override:
             return
         step, when = self.last_step()
         if step is None:
             return
         remaining = self.run_fade(step) * 60 - (dt_util.now() - when).total_seconds()
         _LOGGER.info("Catching up with the schedule (step at %s)", step["time"])
-        await self._run(step, max(0.0, remaining) if remaining > 1 else 0)
+        await self._run(step, max(remaining if remaining > 1 else 0.0, min_transition))
+
+    # ---- maintenance / photo mode ------------------------------------
+
+    def override_info(self) -> dict[str, Any] | None:
+        if not self.override:
+            return None
+        return {**self.override, "until": dt_util.as_local(self.override["until"]).isoformat()}
+
+    async def start_override(self, mode: str, preset: str, minutes: float) -> None:
+        """Show `preset` for `minutes`, skipping schedule steps; then back to the schedule."""
+        self._cancel_override_timer()
+        until = dt_util.utcnow() + timedelta(minutes=minutes)
+        self.override = {"mode": mode, "preset": preset, "until": until}
+        self._override_timer = async_track_point_in_utc_time(self.hass, self._override_expired, until)
+        _LOGGER.info("%s mode: %s for %g min", mode.capitalize(), preset, minutes)
+        self._notify()
+        if preset in self.device.presets:
+            await self.device.apply_preset(preset, 0)
+
+    async def end_override(self) -> None:
+        """Back to the schedule, fading there over a minute."""
+        if not self.override:
+            return
+        mode = self.override["mode"]
+        self._cancel_override_timer()
+        self.override = None
+        _LOGGER.info("%s mode ended, back to the schedule", mode.capitalize())
+        self._notify()
+        await self.apply_current(min_transition=60)
+
+    @callback
+    def _override_expired(self, _now: datetime) -> None:
+        self._override_timer = None
+        self.hass.async_create_task(self.end_override())
+
+    @callback
+    def _cancel_override_timer(self) -> None:
+        if self._override_timer:
+            self._override_timer()
+            self._override_timer = None
+
+    # ---- CO₂ interlock ------------------------------------------------
+
+    @callback
+    def co2_changed(self) -> None:
+        """CO₂ became ready or stopped being ready: adjust the light if it's on a step."""
+        self._notify()
+        if not self.co2 or not self.co2.enabled or not self.enabled or self.override:
+            return
+        factor = self.co2_factor()
+        step, _when = self.last_step()
+        if step is None or step["target"] == OFF_TARGET or factor == self._co2_factor_applied:
+            return
+        if factor < 1:
+            _LOGGER.info("CO₂ no longer ready (%s): lowering the light", self.co2.ready()[1])
+        else:
+            _LOGGER.info("CO₂ ready again: back to normal brightness")
+            self._co2_message(f"CO₂ is ready again ({self.co2.ready()[1]}). The light is back to normal brightness.")
+        # Gently, over 5 minutes (or the rest of a running fade)
+        self.hass.async_create_task(self.apply_current(min_transition=300))
+
+    def _co2_message(self, message: str) -> None:
+        from homeassistant.components import persistent_notification
+
+        persistent_notification.async_create(
+            self.hass, message, title="Week Aqua: CO₂ interlock",
+            notification_id=f"weekaqua_co2_{self.device.address}",
+        )
 
     async def set_enabled(self, enabled: bool) -> None:
         self.enabled = enabled

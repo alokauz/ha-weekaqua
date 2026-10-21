@@ -9,6 +9,14 @@ CONF_PRESETS = "presets"
 CONF_SCHEDULE = "schedule"
 # Acclimation program settings, see acclimation.py
 CONF_ACCLIMATION = "acclimation"
+# CO₂ interlock settings, see co2.py
+CONF_CO2 = "co2"
+# Maintenance / photo mode: preset and minutes for each
+CONF_MODES = "modes"
+DEFAULT_MODES = {
+    "maintenance": {"preset": "White", "minutes": 60},
+    "photo": {"preset": "Colorful", "minutes": 30},
+}
 # "slider" or "box" for the channel and fan controls
 CONF_INPUT_MODE = "input_mode"
 # Shortest seconds between two fade commands, and the fade curve

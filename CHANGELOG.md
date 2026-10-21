@@ -2,6 +2,14 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b6
+
+- **CO₂ interlock** (Configure): choose the entity that switches your CO₂ (e.g. the solenoid's smart plug). If it hasn't been on for the lead time when an On step runs, or turns off or becomes unavailable while the light is on, the light is held at a fallback brightness and you get a notification; it comes back up by itself once CO₂ is ready. A plug that is already on when Home Assistant restarts counts as ready. New **CO₂ ready** sensor with the reason.
+- **Maintenance mode** and **Photo mode** switches: a preset for a set time (Configure: preset and minutes), skipping schedule steps, then back to the schedule by itself.
+- **Connection diagnostics**: **Connection** and **Last command** sensors (Diagnostic section), a notice under Settings → Repairs when the light has been unreachable for 10 minutes (it disappears by itself), and **Download diagnostics** for bug reports.
+- **Acclimation**: a date-by-date plan in Configure → Acclimation, and **Go back one step** (e.g. if algae appear), which repeats the previous stage for a full interval.
+- The app's *Gorgeous* preset (101.8 %) is now scaled slightly to stay within the power limit, like everything else.
+
 ## 0.10.0b5
 
 - **Off steps now end at their time**: `21:00 · Off · fade 60 min` means the light is fully off at 21:00, and the sunset starts at 20:00. On steps still start fading in at their time, so a light period runs from the On time to the Off time, like most aquarium lights. **If you have Off steps with a fade, they now finish earlier than before**: move them later by the fade time to keep the old timing.

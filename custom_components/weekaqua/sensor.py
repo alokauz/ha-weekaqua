@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -40,6 +40,7 @@ async def async_setup_entry(
             WeekAquaCurrentStep(device),
             WeekAquaScheduleSteps(device),
             WeekAquaAcclimationSensor(device),
+            WeekAquaLastCommand(device),
         ]
     )
 
@@ -234,3 +235,23 @@ class WeekAquaAcclimationSensor(WeekAquaEntity, SensorEntity):
                 if s["target"] != OFF_TARGET
             },
         }
+
+
+class WeekAquaLastCommand(WeekAquaEntity, SensorEntity):
+    """When a command last reached the light (diagnostic)."""
+
+    _attr_translation_key = "last_command"
+    _attr_icon = "mdi:bluetooth-transfer"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "last_command")
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._device.add_connection_listener(self.async_write_ha_state))
+
+    @property
+    def native_value(self):
+        return self._device.last_success

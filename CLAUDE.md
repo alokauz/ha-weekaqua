@@ -42,6 +42,9 @@ Installed by users through HACS from this repository. Owner: Flint.
 | `device.py` | `WeekAquaDevice`: BLE connection, channel state (`levels`, `target`), fades, fan, presets, power limit, listeners |
 | `schedule.py` | `WeekAquaScheduler`: schedule steps from options, firing, retries, startup catch-up, log text |
 | `acclimation.py` | Acclimation program: ramps brightness and light period up to the normal schedule, then finishes; progress in a `Store`, notifications |
+| `co2.py` | CO₂ interlock: watches the CO₂ plug entity, ready after the lead time, fallback factor; treats a plug already on at HA start as ready |
+| `binary_sensor.py` | Connection, CO₂ ready |
+| `diagnostics.py` | Download diagnostics |
 | `light.py` | RGBW light (white = UV), transitions, presets as effects |
 | `number.py` | Sliders 1. R / 2. G / 3. B / 4. UV / 5. Fan (Configuration section, slider or box) |
 | `select.py` | Preset picker (own presets first, most recently used on top) |
@@ -65,7 +68,8 @@ Installed by users through HACS from this repository. Owner: Flint.
   where the schedule says (continuing a fade). Not on reloads.
 - Options (presets, schedule, settings) live in the config entry's `options`;
   saving them reloads the entry.
-- Single channel sliders refuse changes above the power limit (like the app);
+- Brightness factors multiply: step brightness × acclimation × CO₂ fallback. The CO₂ interlock and acclimation only ever lower the light. Maintenance/photo mode (`Scheduler.override`) skips steps and fades back to the schedule when it ends.
+- The power limit applies to everything, app presets included (no exemptions). Single channel sliders refuse changes above the power limit (like the app);
   everything else scales down proportionally. Lowering is always allowed.
 - Acclimation never goes beyond the normal schedule (brightness ≤ 100 % of each step, Off steps only ever earlier, never before the previous step's fade ends) and always finishes by itself. Keep it that way.
 - Never change entity `unique_id`s (users' entity IDs and automations depend on
@@ -90,7 +94,7 @@ Home Assistant's test tools are made for Linux/macOS; on Windows run them in WSL
 (`wsl`, then the commands above) if they won't install natively. GitHub Actions
 also runs them on every push (`.github/workflows/release.yml`).
 
-Test notes: `conftest.py` mocks the setup of HA's bluetooth/bluetooth_adapters/usb components (they depend on the machine and broke when GitHub's runner image changed); CI is pinned to `ubuntu-24.04`. Tests fake the Bluetooth client (`fake_client`) and check the exact
+Test notes: the `client` fixture fakes `asyncio.sleep` (also inside `block_till_done`), so state-change events need `await let_loop_run()` to be delivered. `conftest.py` mocks the setup of HA's bluetooth/bluetooth_adapters/usb components (they depend on the machine and broke when GitHub's runner image changed); CI is pinned to `ubuntu-24.04`. Tests fake the Bluetooth client (`fake_client`) and check the exact
 bytes sent. Patching `asyncio.sleep` in `device` patches it globally — only
 freeze long waits. Fake clocks via `loop.time` must not be active while waiting
 for HA's own time triggers.

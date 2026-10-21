@@ -216,6 +216,44 @@ class Acclimation:
             self._message("Acclimation stopped", "The light is back on your normal schedule.")
         self._notify()
 
+    def plan(self, settings: dict[str, Any] | None = None, start: date | None = None) -> list[str]:
+        """One line per stage: 'From 16 Oct: 60% · 2 h shorter'."""
+        preview = Acclimation.__new__(Acclimation)
+        preview.settings = {**self.settings, **(settings or {})}
+        start = start or (
+            date.fromisoformat(self.state["started"]) if self.running and settings is None else self._today()
+        )
+        paused = self.state["paused_days"] if self.running and settings is None else 0
+        lines = []
+        for stage in range(preview.total_stages() + 1):
+            brightness, shorter = preview.values(stage)
+            day = start + timedelta(days=stage * int(preview.settings["interval_days"]) + paused)
+            what = "normal schedule" if stage == preview.total_stages() else (
+                f"{brightness:g}%" + (f" · {describe_minutes(shorter)} shorter" if shorter else "")
+            )
+            mark = " ← now" if self.running and settings is None and stage == self.stage() else ""
+            lines.append(f"{day:%d %b}: {what}{mark}")
+        return lines
+
+    async def async_step_back(self) -> None:
+        """Go back to the previous stage (e.g. algae appeared) and stay there a full interval."""
+        if not self.running or self.stage() == 0:
+            return
+        interval = int(self.settings["interval_days"])
+        target_days = (self.stage() - 1) * interval
+        # Count the extra time as paused: the previous stage now lasts a full interval from today
+        self.state["paused_days"] += self.days() - target_days
+        self.state["stage_notified"] = self.stage()
+        await self._save()
+        brightness, shorter = self.values(self.stage())
+        self._message(
+            "Acclimation went back one step",
+            f"Now {brightness:g}% brightness"
+            + (f", light period {describe_minutes(shorter)} shorter than normal" if shorter else "")
+            + f". Next step on {self.next_change():%d %b}; back to normal on {self.ends():%d %b %Y}.",
+        )
+        self._notify()
+
     async def async_pause(self) -> None:
         if self.running and not self.paused:
             self.state["paused_since"] = self._today().isoformat()

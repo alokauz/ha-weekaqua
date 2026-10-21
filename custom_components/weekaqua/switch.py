@@ -20,7 +20,14 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     device = entry.runtime_data
-    async_add_entities([WeekAquaScheduleSwitch(device), WeekAquaAcclimationSwitch(device)])
+    async_add_entities(
+        [
+            WeekAquaScheduleSwitch(device),
+            WeekAquaAcclimationSwitch(device),
+            WeekAquaModeSwitch(device, "maintenance", "mdi:wrench-clock"),
+            WeekAquaModeSwitch(device, "photo", "mdi:camera"),
+        ]
+    )
 
 
 class WeekAquaScheduleSwitch(WeekAquaEntity, SwitchEntity, RestoreEntity):
@@ -89,3 +96,38 @@ class WeekAquaAcclimationSwitch(WeekAquaEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self._acc.async_pause()
+
+
+class WeekAquaModeSwitch(WeekAquaEntity, SwitchEntity):
+    """Maintenance / photo mode: a preset for a while, then back to the schedule by itself."""
+
+    def __init__(self, device, mode: str, icon: str) -> None:
+        super().__init__(device, f"{mode}_mode")
+        self._mode = mode
+        self._attr_translation_key = f"{mode}_mode"
+        self._attr_icon = icon
+        self._sched = device.scheduler
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._sched.add_listener(self.async_write_ha_state))
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self._sched.override and self._sched.override["mode"] == self._mode)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        settings = self._device.modes[self._mode]
+        attrs = {"preset": settings["preset"], "minutes": settings["minutes"]}
+        if self.is_on:
+            attrs["ends_at"] = self._sched.override_info()["until"]
+        return attrs
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        settings = self._device.modes[self._mode]
+        await self._sched.start_override(self._mode, settings["preset"], settings["minutes"])
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        if self.is_on:
+            await self._sched.end_override()

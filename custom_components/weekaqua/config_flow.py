@@ -28,12 +28,17 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectSelectorMode,
     TextSelector,
+    EntitySelector,
+    EntitySelectorConfig,
     TimeSelector,
 )
 
 from .const import (
     CHANNELS,
     CONF_ACCLIMATION,
+    CONF_CO2,
+    CONF_MODES,
+    DEFAULT_MODES,
     CONF_FADE_CURVE,
     CONF_FADE_INTERVAL,
     CURVE_LABELS,
@@ -51,6 +56,7 @@ from .const import (
     total_power,
 )
 from .device import describe_levels
+from .co2 import DEFAULTS as CO2_DEFAULTS
 from .acclimation import DEFAULTS as ACCLIMATION_DEFAULTS, Acclimation, describe_minutes
 from .schedule import ALL_DAYS, DAY_NAMES, OFF_TARGET, describe_step, step_time
 
@@ -167,6 +173,8 @@ class WeekAquaOptionsFlow(OptionsFlow):
         if self._steps():
             menu.append("remove_schedule")
         menu.append("acclimation")
+        menu.append("co2")
+        menu.append("modes")
         menu.append("fade")
         menu.append("power")
         menu.append("display")
@@ -298,6 +306,9 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 elif action == "stop":
                     await acc.async_stop()
                     await device.scheduler.apply_current()
+                elif action == "back":
+                    await acc.async_step_back()
+                    await device.scheduler.apply_current(min_transition=300)
                 return self._save(**{CONF_ACCLIMATION: settings})
 
         values = user_input or acc.settings
@@ -307,6 +318,8 @@ class WeekAquaOptionsFlow(OptionsFlow):
             )
         actions = [SelectOptionDict(value="save", label="Save settings only")]
         actions.append(SelectOptionDict(value="start", label="Restart from the beginning now" if acc.running else "Start now"))
+        if acc.running and acc.stage() > 0:
+            actions.append(SelectOptionDict(value="back", label="Go back one step (e.g. algae appeared), and stay there a full interval"))
         if acc.running:
             actions.append(SelectOptionDict(value="stop", label="Stop: back to the normal schedule now"))
         schema = vol.Schema(
@@ -347,9 +360,70 @@ class WeekAquaOptionsFlow(OptionsFlow):
             description_placeholders={
                 "status": status,
                 "plan": plan,
+                "plan_lines": "\n".join(
+                    acc.plan() if acc.running and user_input is None
+                    else acc.plan({k: values[k] for k in ACCLIMATION_DEFAULTS})
+                ),
                 "off_note": "" if has_off else "\n\nNote: your schedule has no Off step, so the light period can't be shortened.",
             },
         )
+
+    async def async_step_co2(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """CO₂ interlock: hold On steps at a fallback brightness until CO₂ is ready."""
+        current = {**CO2_DEFAULTS, **self.config_entry.options.get(CONF_CO2, {})}
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input.get("enabled") and not user_input.get("entity_id"):
+                errors["entity_id"] = "co2_entity_missing"
+            else:
+                return self._save(**{CONF_CO2: {
+                    "enabled": bool(user_input.get("enabled")),
+                    "entity_id": user_input.get("entity_id"),
+                    "lead": int(user_input["lead"]),
+                    "fallback": int(user_input["fallback"]),
+                }})
+            current = {**current, **user_input}
+        entity_key = (
+            vol.Optional("entity_id", description={"suggested_value": current["entity_id"]})
+            if current.get("entity_id") else vol.Optional("entity_id")
+        )
+        status = self.config_entry.runtime_data.co2.ready()[1] if current.get("enabled") else "off"
+        return self.async_show_form(
+            step_id="co2",
+            data_schema=vol.Schema({
+                vol.Required("enabled", default=current["enabled"]): bool,
+                entity_key: EntitySelector(EntitySelectorConfig(domain=["switch", "input_boolean", "binary_sensor", "light"])),
+                vol.Required("lead", default=current["lead"]): NumberSelector(NumberSelectorConfig(min=0, max=240, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)),
+                vol.Required("fallback", default=current["fallback"]): NumberSelector(NumberSelectorConfig(min=0, max=100, step=5, unit_of_measurement="%", mode=NumberSelectorMode.BOX)),
+            }),
+            errors=errors,
+            description_placeholders={"status": status},
+        )
+
+    async def async_step_modes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Preset and duration of the maintenance and photo modes."""
+        device = self.config_entry.runtime_data
+        modes = {**DEFAULT_MODES, **self.config_entry.options.get(CONF_MODES, {})}
+        if user_input is not None:
+            return self._save(**{CONF_MODES: {
+                m: {"preset": user_input[f"{m}_preset"], "minutes": int(user_input[f"{m}_minutes"])}
+                for m in ("maintenance", "photo")
+            }})
+        presets = [SelectOptionDict(value=n, label=n) for n in device.ordered_presets()]
+        fields: dict[Any, Any] = {}
+        for m in ("maintenance", "photo"):
+            preset = modes[m]["preset"] if modes[m]["preset"] in device.presets else device.ordered_presets()[0]
+            fields[vol.Required(f"{m}_preset", default=preset)] = SelectSelector(
+                SelectSelectorConfig(options=presets, mode=SelectSelectorMode.DROPDOWN)
+            )
+            fields[vol.Required(f"{m}_minutes", default=modes[m]["minutes"])] = NumberSelector(
+                NumberSelectorConfig(min=5, max=480, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)
+            )
+        return self.async_show_form(step_id="modes", data_schema=vol.Schema(fields))
 
     async def async_step_fade(
         self, user_input: dict[str, Any] | None = None

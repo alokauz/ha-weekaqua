@@ -58,7 +58,6 @@ Like the app's *Total power* slider, the integration keeps the light's total pow
 - Colors, presets, schedules and fades above 100 % are scaled down proportionally (same color, slightly dimmer); the log says when this happens.
 - A single channel slider refuses a change that would exceed 100 %, like the app. Lowering is always allowed.
 - Custom presets above 100 % can't be saved.
-- The app's own presets are sent unchanged (*Gorgeous* is 101.8 %), as the app does.
 - The **Power** sensor shows the current total power.
 - **Configure → Power limit** can turn it off. Only do this if you know your light can handle it.
 
@@ -99,8 +98,23 @@ For a new tank, new plants or new livestock, **Configure → Acclimation** bring
 
 - **Brightness** starts at a share of your schedule's brightness (e.g. 60 %) and rises by a step (e.g. 10 %) at each interval (e.g. 7 days).
 - **Light period** starts shorter (Off steps run e.g. 2 h earlier, never before the previous step's fade has ended) and gets longer by a step (e.g. 30 min) at each interval.
+- **Configure → Acclimation** shows the plan date by date. **Go back one step** (e.g. if algae appear) repeats the previous stage for a full interval.
 - It stops at your normal schedule and **finishes by itself**, so it can't run away if you forget about it.
 - You get a **notification** at every step. The **Acclimation** sensor shows the current level, the next step and the end date. The **Acclimation** switch pauses it (the level is held and the days don't count) and resumes it.
+
+## CO₂ interlock
+
+For CO₂-injected tanks, **Configure → CO₂ interlock** keeps the plants from getting full light without CO₂. Choose the entity that switches your CO₂ (e.g. the solenoid's smart plug), a **lead time** and a **fallback brightness**:
+
+- If CO₂ hasn't been on for the lead time when an On step runs, or turns off or becomes unavailable while the light is on, the light is held at the fallback brightness (a share of the step's brightness) and you get a notification.
+- When CO₂ has been on for the lead time, the light comes back up by itself over a few minutes.
+- The **CO₂ ready** sensor shows whether CO₂ is ready, and why not.
+
+The interlock only checks that the plug is on, not how much CO₂ is in the water (use a drop checker for that), never switches the CO₂ itself and only ever lowers the light.
+
+## Maintenance and photo modes
+
+The **Maintenance mode** and **Photo mode** switches show a preset for a set time, skipping schedule steps, then fade back to the schedule by themselves. Choose each mode's preset and duration under **Configure → Maintenance and photo modes**.
 
 ## Sunrise and sunset with automations
 
@@ -142,6 +156,9 @@ The light can't fade on command, so the integration sends a series of small leve
 During a fade, entity states are updated every 30 s and at the end (not every step), which keeps the recorder database small. Touching any slider, preset or the light during a fade stops it. If Home Assistant restarts mid-fade, the built-in schedule continues it after startup.
 
 ## Troubleshooting
+
+The **Connection** and **Last command** sensors (Diagnostic section of the device page) show whether commands reach the light; the light can't confirm it applied them. If the light has been unreachable for 10 minutes, a notice appears under **Settings → Repairs** and disappears by itself once a command gets through. For bug reports, use **⋮ → Download diagnostics** on the integration.
+
 
 Enable debug logging and include the `weekaqua` log lines when opening an issue:
 

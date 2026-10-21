@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from datetime import timedelta
 import logging
 import math
 
@@ -17,9 +18,12 @@ from bleak_retry_connector import (
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DISCONNECT_DELAY,
+    DOMAIN,
     MAX_LEVEL,
     PRESETS,
     WRITE_CHAR_PREFIXES,
@@ -28,6 +32,10 @@ from .const import (
     fan_cmd,
     levels_cmd,
 )
+
+# A Repairs notice appears after this many failed commands over this long
+UNREACHABLE_FAILURES = 3
+UNREACHABLE_AFTER = timedelta(minutes=10)
 
 # Shortest time between two steps of a fade (the app also waits 500 ms between writes).
 MIN_STEP_INTERVAL = 0.5
@@ -68,6 +76,13 @@ class WeekAquaDevice:
         self._listeners: list[Callable[[], None]] = []
         self._fade_task: asyncio.Task | None = None
         self.input_mode = "slider"
+        # Connection diagnostics
+        self.last_success = None
+        self.last_error: str | None = None
+        self.last_error_time = None
+        self.failures = 0
+        self.first_failure = None
+        self._connection_listeners: list[Callable[[], None]] = []
         # Keep total power at or below 100 %, like the app (Configure can turn it off)
         self.power_limit = True
         # Fade settings (from Configure): shortest seconds between commands, and curve
@@ -75,6 +90,8 @@ class WeekAquaDevice:
         self.fade_curve = "perceptual"
         self.scheduler = None  # set in __init__.py
         self.acclimation = None  # set in __init__.py
+        self.co2 = None  # set in __init__.py
+        self.modes: dict[str, dict] = {}  # set in __init__.py
         # Fan speed in percent, None until it has been set once.
         self.fan: float | None = None
         # App presets first, then the user's own. Custom presets may also set the fan.
@@ -130,7 +147,7 @@ class WeekAquaDevice:
         """Name of the preset with exactly these levels, if any."""
         levels = tuple(levels)
         for preset_name, preset_levels in self.presets.items():
-            if preset_levels == levels:
+            if preset_levels == levels or (self.power_limit and limit_power(preset_levels) == levels):
                 return preset_name
         return None
 
@@ -180,9 +197,10 @@ class WeekAquaDevice:
         """
         target = _clamp(levels)
         power = total_power(target)
-        # The app's own presets are sent unchanged by the app (Gorgeous is 101.8 %),
-        # and lowering power is always allowed.
-        exempt = target in {tuple(p) for p in PRESETS.values()} or power <= total_power(self.levels)
+        # Lowering power is always allowed (e.g. from a level set before the
+        # limit was turned on). Everything else, app presets included, is held
+        # to 100 % (the app's Gorgeous preset is 101.8 % and is scaled slightly).
+        exempt = power <= total_power(self.levels)
         if self.power_limit and power > 100.05 and not exempt:
             if strict:
                 raise HomeAssistantError(
@@ -301,18 +319,73 @@ class WeekAquaDevice:
         """Send one or more commands, 500 ms apart (like the app)."""
         async with self._lock:
             try:
-                await self._write(payloads)
-            except (BleakError, TimeoutError) as err:
-                _LOGGER.debug("Write failed (%s), reconnecting and retrying", err)
-                await self._disconnect()
                 try:
                     await self._write(payloads)
-                except (BleakError, TimeoutError) as err2:
+                except (BleakError, TimeoutError) as err:
+                    _LOGGER.debug("Write failed (%s), reconnecting and retrying", err)
                     await self._disconnect()
-                    raise HomeAssistantError(
-                        f"Could not send command to {self.name}: {err2}"
-                    ) from err2
+                    try:
+                        await self._write(payloads)
+                    except (BleakError, TimeoutError) as err2:
+                        await self._disconnect()
+                        raise HomeAssistantError(
+                            f"Could not send command to {self.name}: {err2}"
+                        ) from err2
+            except HomeAssistantError as err:
+                self._record_failure(str(err))
+                raise
+            self._record_success()
             self._schedule_disconnect()
+
+    # ---- connection diagnostics ---------------------------------------
+    # The light never answers, so "success" means the Bluetooth write went
+    # through, not that the light confirmed the change.
+
+    @callback
+    def _record_success(self) -> None:
+        recovered = self.failures > 0
+        self.last_success = dt_util.utcnow()
+        self.failures = 0
+        self.first_failure = None
+        if recovered:
+            _LOGGER.info("%s is reachable again", self.name)
+            ir.async_delete_issue(self.hass, DOMAIN, f"unreachable_{self.address}")
+        self._notify_connection()
+
+    @callback
+    def _record_failure(self, error: str) -> None:
+        now = dt_util.utcnow()
+        self.failures += 1
+        self.last_error = error
+        self.last_error_time = now
+        if self.first_failure is None:
+            self.first_failure = now
+        # Tell the user (Settings → Repairs) once it has been failing for a while
+        if self.failures >= UNREACHABLE_FAILURES and now - self.first_failure >= UNREACHABLE_AFTER:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                f"unreachable_{self.address}",
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="light_unreachable",
+                translation_placeholders={
+                    "name": self.name,
+                    "since": dt_util.as_local(self.first_failure).strftime("%H:%M"),
+                    "error": error[:200],
+                },
+            )
+        self._notify_connection()
+
+    @callback
+    def add_connection_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        self._connection_listeners.append(listener)
+        return lambda: self._connection_listeners.remove(listener)
+
+    @callback
+    def _notify_connection(self) -> None:
+        for listener in list(self._connection_listeners):
+            listener()
 
     async def _write(self, payloads: tuple[bytes, ...]) -> None:
         await self._ensure_connected()

@@ -35,6 +35,20 @@ def client():
         yield c
 
 
+async def let_loop_run(times: int = 5) -> None:
+    """Give the event loop real turns, so state-change events get delivered.
+
+    The client fixture fakes asyncio.sleep (also used by block_till_done),
+    which would otherwise never yield to the loop.
+    """
+    import asyncio
+    loop = asyncio.get_running_loop()
+    for _ in range(times):
+        fut = loop.create_future()
+        loop.call_soon(fut.set_result, None)
+        await fut
+
+
 def sent(client):
     return [call.args[1].hex().upper() for call in client.write_gatt_char.call_args_list]
 
@@ -177,7 +191,7 @@ async def test_custom_presets(hass, client):
     await call("number", "set_value", {"entity_id": "number.b3_0_l600pro_71_4_uv", "value": 30}, blocking=True)
     await call("number", "set_value", {"entity_id": fan, "value": 40}, blocking=True)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["type"] is FlowResultType.MENU and flow["menu_options"] == ["add_preset", "add_schedule", "acclimation", "fade", "power", "display"]
+    assert flow["type"] is FlowResultType.MENU and flow["menu_options"] == ["add_preset", "add_schedule", "acclimation", "co2", "modes", "fade", "power", "display"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_preset"})
     defaults = {str(k): k.default() for k in flow["data_schema"].schema if hasattr(k, "default") and callable(k.default)}
     print(defaults)
@@ -218,7 +232,7 @@ async def test_custom_presets(hass, client):
 
     # Remove it
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["menu_options"] == ["add_preset", "edit_preset", "remove_preset", "add_schedule", "acclimation", "fade", "power", "display"]
+    assert flow["menu_options"] == ["add_preset", "edit_preset", "remove_preset", "add_schedule", "acclimation", "co2", "modes", "fade", "power", "display"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "remove_preset"})
     await hass.config_entries.options.async_configure(flow["flow_id"], {"remove": ["My Reef"]})
     await hass.async_block_till_done()
@@ -283,7 +297,7 @@ async def test_schedule(hass, client, freezer):
 async def test_schedule_and_display_forms(hass, client):
     entry = await setup(hass)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["menu_options"] == ["add_preset", "add_schedule", "acclimation", "fade", "power", "display"]
+    assert flow["menu_options"] == ["add_preset", "add_schedule", "acclimation", "co2", "modes", "fade", "power", "display"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_schedule"})
     bad = await hass.config_entries.options.async_configure(flow["flow_id"],
         {"time": "09:30:00", "target": "Fresh", "brightness": 60, "fade": 45, "days": []})
@@ -579,12 +593,13 @@ async def test_power_limit(hass, client):
     assert sent(client)[-1] == "FBF9A3A3A3A35555"            # 163 each = same color, 99.9 %
     assert float(hass.states.get(power).state) <= 100
 
-    # App preset Gorgeous (101.8 %) is sent unchanged, like the app does
+    # App preset Gorgeous (101.8 %) is scaled slightly to stay within 100 %, and still recognised
     await call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "Gorgeous"}, blocking=True)
-    assert sent(client)[-1] == "FBF9C15EBCEB5555"
+    assert sent(client)[-1] == "FBF9BD5CB8E65555"
+    assert float(hass.states.get(power).state) <= 100
     assert hass.states.get("select.b3_0_l600pro_71_preset").state == "Gorgeous"
-    # ...and lowering a channel from there is always allowed, even if still above 100 %
-    await call("number", "set_value", {"entity_id": b, "value": 79}, blocking=True)
+    # ...and lowering a channel from there is allowed
+    await call("number", "set_value", {"entity_id": b, "value": 70}, blocking=True)
 
     # A single slider that would push past 100 % is refused, like the app
     await call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "Colorful"}, blocking=True)
@@ -891,4 +906,221 @@ async def test_off_time_is_end_and_acclimation_channels(hass, client, freezer):
     bad = await hass.config_entries.options.async_configure(flow["flow_id"],
         {"time": "00:30:00", "target": "__off__", "brightness": 100, "fade": 60, "curve": "default", "smoothness": "default", "days": [str(i) for i in every]})
     assert bad["errors"] == {"fade": "fade_before_midnight"}
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_connection_diagnostics_and_repairs(hass, client, freezer):
+    from datetime import datetime, timedelta
+    from bleak.exc import BleakError
+    from homeassistant.helpers import issue_registry as ir
+    from homeassistant.util import dt as dt_util
+    from custom_components.weekaqua.diagnostics import async_get_config_entry_diagnostics
+
+    tz = dt_util.get_default_time_zone()
+    freezer.move_to(datetime(2026, 10, 16, 12, 0, 0, tzinfo=tz))
+    entry = await setup(hass)
+    conn, last = "binary_sensor.b3_0_l600pro_71_connection", "sensor.b3_0_l600pro_71_last_command"
+    assert hass.states.get(conn).state == "unknown"             # nothing sent yet
+    await hass.services.async_call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "Nature"}, blocking=True)
+    assert hass.states.get(conn).state == "on"
+    assert hass.states.get(last).state.startswith("2026-10-16T")
+
+    # The light becomes unreachable: off at once, Repairs notice after 3 failures over 10 min
+    client.write_gatt_char.side_effect = BleakError("busy")
+    for minutes in (0, 5, 11):
+        freezer.move_to(datetime(2026, 10, 16, 12, minutes, 30, tzinfo=tz))
+        with pytest.raises(Exception):
+            await hass.services.async_call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "White"}, blocking=True)
+        if minutes == 5:
+            assert ir.async_get(hass).async_get_issue(DOMAIN, f"unreachable_{ADDR}") is None
+    assert hass.states.get(conn).state == "off"
+    assert hass.states.get(conn).attributes["failed_in_a_row"] == 3
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, f"unreachable_{ADDR}")
+    assert issue is not None and issue.translation_key == "light_unreachable"
+
+    diag = await async_get_config_entry_diagnostics(hass, entry)
+    assert diag["entry"]["data"]["address"] == "**REDACTED**"
+    assert diag["connection"]["failed_in_a_row"] == 3 and "busy" in diag["connection"]["last_error"]
+    assert diag["light"]["levels"] == [0x77, 0xEB, 0x77, 0]
+
+    # Back in range: notice disappears by itself
+    client.write_gatt_char.side_effect = None
+    await hass.services.async_call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "White"}, blocking=True)
+    assert hass.states.get(conn).state == "on"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, f"unreachable_{ADDR}") is None
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_maintenance_mode(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "15:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "16:00", "target": "Fresh", "brightness": 100, "fade": 0, "days": every}]
+    freezer.move_to(datetime(2026, 10, 16, 15, 30, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps, "modes": {"maintenance": {"preset": "White", "minutes": 45}, "photo": {"preset": "Colorful", "minutes": 30}}})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sw = "switch.b3_0_l600pro_71_maintenance_mode"
+
+    client.write_gatt_char.reset_mock()
+    await hass.services.async_call("switch", "turn_on", {"entity_id": sw}, blocking=True)
+    assert sent(client)[-1] == "FBF97EEB69005555"                       # White
+    st = hass.states.get(sw)
+    assert st.state == "on" and st.attributes["ends_at"].startswith("2026-10-16T16:15")
+
+    # The 16:00 step is skipped while maintenance mode is on
+    client.write_gatt_char.reset_mock()
+    freezer.move_to(datetime(2026, 10, 16, 16, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent(client) == []
+
+    # At 16:15 it ends by itself and fades back to where the schedule is (16:00 Fresh)
+    freezer.move_to(datetime(2026, 10, 16, 16, 15, 1, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get(sw).state == "off"
+    assert sent(client)[-1] == "FBF959EB60005555"                       # Fresh
+    assert len(sent(client)) > 1                                        # faded, not jumped
+
+    # Photo mode can be ended early
+    await hass.services.async_call("switch", "turn_on", {"entity_id": "switch.b3_0_l600pro_71_photo_mode"}, blocking=True)
+    assert sent(client)[-1] == "FBF9EB5E94EB5555"                       # Colorful
+    await hass.services.async_call("switch", "turn_off", {"entity_id": "switch.b3_0_l600pro_71_photo_mode"}, blocking=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent(client)[-1] == "FBF959EB60005555"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_co2_interlock(hass, client, freezer, caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="custom_components.weekaqua")
+    """CO₂ plug off at the On step -> fallback; on for the lead time -> full; off during the day -> fallback."""
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "15:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    freezer.move_to(datetime(2026, 10, 16, 14, 50, 0, tzinfo=tz))
+    hass.states.async_set("switch.co2_plug", "off")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps, "co2": {"enabled": True, "entity_id": "switch.co2_plug", "lead": 60, "fallback": 50}})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    ready = "binary_sensor.b3_0_l600pro_71_co2_ready"
+    assert hass.states.get(ready).state == "off"
+    assert hass.states.get(ready).attributes["reason"].startswith("CO₂ is off")
+
+    # 15:00 On step while CO₂ is off: Nature at 50 % (77 EB 77 * 0.5 = 3C 76 3C), notification
+    client.write_gatt_char.reset_mock()
+    freezer.move_to(datetime(2026, 10, 16, 15, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent(client)[-1] == "FBF93C763C005555"
+    cur = hass.states.get("sensor.b3_0_l600pro_71_current_step")
+    assert cur.state == "15:00 · On · Nature 50% (CO₂ not ready, normally 100%) · every day"
+    assert "to preset 'Nature' at 50% (CO₂ not ready: CO₂ is off (since 14:50), fallback 50%; normally 100%)" in caplog.text
+
+    # CO₂ switched on at 15:10: not ready yet (60 min lead), light stays at 50 %
+    freezer.move_to(datetime(2026, 10, 16, 15, 10, 0, tzinfo=tz))
+    client.write_gatt_char.reset_mock()
+    hass.states.async_set("switch.co2_plug", "on")
+    await let_loop_run()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent(client) == []
+    assert hass.states.get(ready).attributes["ready_at"].startswith("2026-10-16T16:10")
+
+    # 16:10: ready -> back to full over 5 minutes
+    freezer.move_to(datetime(2026, 10, 16, 16, 10, 1, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get(ready).state == "on"
+    assert sent(client)[-1] == "FBF977EB77005555" and len(sent(client)) > 1
+
+    # 18:00 CO₂ plug goes unavailable: light lowers to 50 % again
+    client.write_gatt_char.reset_mock()
+    freezer.move_to(datetime(2026, 10, 16, 18, 0, 0, tzinfo=tz))
+    hass.states.async_set("switch.co2_plug", "unavailable")
+    await let_loop_run()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent(client)[-1] == "FBF93C763C005555"
+    assert hass.states.get(ready).attributes["reason"] == "the CO₂ plug is unavailable"
+
+    # Off steps are never affected
+    client.write_gatt_char.reset_mock()
+    freezer.move_to(datetime(2026, 10, 16, 21, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent(client)[-1] == "FBF9000000005555"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_co2_on_at_restart_counts_as_ready(hass, client, freezer):
+    """After an HA restart every entity looks freshly changed; a plug already on must not dim the light for an hour."""
+    from datetime import datetime
+    from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+    from homeassistant.core import CoreState
+    from homeassistant.util import dt as dt_util
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "15:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    freezer.move_to(datetime(2026, 10, 16, 17, 0, 0, tzinfo=tz))
+    hass.set_state(CoreState.not_running)
+    hass.states.async_set("switch.co2_plug", "on")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps, "co2": {"enabled": True, "entity_id": "switch.co2_plug", "lead": 60, "fallback": 50}})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get("binary_sensor.b3_0_l600pro_71_co2_ready").state == "on"
+    assert sent(client)[-1] == "FBF977EB77005555"                   # full Nature, not 50 %
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_acclimation_step_back_and_plan(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "15:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    freezer.move_to(datetime(2026, 10, 1, 10, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps, "acclimation": {"start_brightness": 60, "brightness_step": 10, "interval_days": 7, "shorten": 120, "shorten_step": 30}})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    acc = entry.runtime_data.acclimation
+    await acc.async_start()
+    freezer.move_to(datetime(2026, 10, 16, 10, 0, 0, tzinfo=tz))          # day 15: stage 3 (80 %)
+    await acc.async_check()
+    assert acc.summary() == "80% · 1 h shorter"
+
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "acclimation"})
+    lines = flow["description_placeholders"]["plan_lines"]
+    print(lines)
+    assert "15 Oct: 80% · 1 h shorter ← now" in lines and "29 Oct: normal schedule" in lines
+    values = {k: acc.settings[k] for k in ("start_brightness", "brightness_step", "interval_days", "shorten", "shorten_step")}
+    await hass.config_entries.options.async_configure(flow["flow_id"], {**values, "action": "back"})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    acc = entry.runtime_data.acclimation          # reloaded
+    assert acc.summary() == "70% · 1 h 30 min shorter"
+    assert acc.next_change().isoformat() == "2026-10-23"                 # a full week at 70 % from today
+    assert acc.ends().isoformat() == "2026-11-06"
     assert await hass.config_entries.async_unload(entry.entry_id)

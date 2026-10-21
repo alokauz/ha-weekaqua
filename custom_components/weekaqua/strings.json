@@ -57,6 +57,12 @@
       },
       "acclimation": {
         "name": "Acclimation"
+      },
+      "maintenance_mode": {
+        "name": "Maintenance mode"
+      },
+      "photo_mode": {
+        "name": "Photo mode"
       }
     },
     "sensor": {
@@ -74,6 +80,17 @@
       },
       "acclimation": {
         "name": "Acclimation"
+      },
+      "last_command": {
+        "name": "Last command"
+      }
+    },
+    "binary_sensor": {
+      "connection": {
+        "name": "Connection"
+      },
+      "co2_ready": {
+        "name": "CO₂ ready"
       }
     }
   },
@@ -90,7 +107,9 @@
           "fade": "Fade smoothness and curve",
           "power": "Power limit",
           "edit_preset": "Edit a preset",
-          "acclimation": "Acclimation (bring the tank up slowly)"
+          "acclimation": "Acclimation (bring the tank up slowly)",
+          "co2": "CO₂ interlock",
+          "modes": "Maintenance and photo modes"
         }
       },
       "add_preset": {
@@ -185,7 +204,7 @@
       },
       "acclimation": {
         "title": "Acclimation",
-        "description": "For a new tank, new plants or new livestock: the schedule starts at lower brightness and a shorter light period, and steps up to your normal schedule. It never goes beyond your normal schedule and finishes by itself. You get a notification at every step; the Acclimation switch pauses it.\n\nNow: {status}\nWith these settings: {plan}{off_note}",
+        "description": "For a new tank, new plants or new livestock: the schedule starts at lower brightness and a shorter light period, and steps up to your normal schedule. It never goes beyond your normal schedule and finishes by itself. You get a notification at every step; the Acclimation switch pauses it.\n\nNow: {status}\nWith these settings: {plan}\n{plan_lines}{off_note}",
         "data": {
           "start_brightness": "Start brightness",
           "brightness_step": "Brightness step",
@@ -207,6 +226,30 @@
           "power_scale": "Scale all channels down to 100 %",
           "power_back": "Go back and change the values"
         }
+      },
+      "co2": {
+        "title": "CO₂ interlock",
+        "description": "Don't give the plants full light without CO₂. Choose the entity that switches your CO₂ (e.g. the solenoid's smart plug). If it hasn't been on for the lead time when an On step runs, or turns off while the light is on, the light is held at the fallback brightness and you get a notification. It comes back up by itself once CO₂ is ready.\n\nThe interlock only checks that the plug is on, not how much CO₂ is in the water, and it never switches the CO₂ itself.\n\nNow: {status}",
+        "data": {
+          "enabled": "Use the CO₂ interlock",
+          "entity_id": "CO₂ plug or switch",
+          "lead": "CO₂ lead time",
+          "fallback": "Fallback brightness"
+        },
+        "data_description": {
+          "lead": "How long CO₂ must be on before the light may go to full brightness.",
+          "fallback": "Share of the step's brightness while CO₂ isn't ready (0 = keep the light off)."
+        }
+      },
+      "modes": {
+        "title": "Maintenance and photo modes",
+        "description": "Turning on the Maintenance mode or Photo mode switch shows this preset for this long, skipping schedule steps, then fades back to the schedule by itself.",
+        "data": {
+          "maintenance_preset": "Maintenance preset",
+          "maintenance_minutes": "Maintenance duration",
+          "photo_preset": "Photo preset",
+          "photo_minutes": "Photo duration"
+        }
       }
     },
     "error": {
@@ -217,12 +260,19 @@
       "cannot_apply": "Couldn't reach the light to show the preset (is the phone app connected?). Untick Show on the light now to just save it.",
       "step_zero": "With a step of 0 the program would never reach your normal schedule.",
       "nothing_to_do": "Start brightness is 100 % and the light period isn't shortened, so there's nothing to do.",
-      "fade_before_midnight": "This Off step's fade would have to start before midnight. Use a later time or a shorter fade."
+      "fade_before_midnight": "This Off step's fade would have to start before midnight. Use a later time or a shorter fade.",
+      "co2_entity_missing": "Choose the entity that switches your CO₂."
     },
     "abort": {
       "loaded": "{name} is now on the light. Adjust it with the sliders on the device page (the Power sensor shows the total live), then open Configure → Edit a preset → {name} → Save what the light shows now into it.",
       "cannot_apply": "Couldn't reach the light (is the phone app connected?). Nothing was changed.",
       "light_off": "The light is off, so there's nothing to save. Turn it on or load the preset first."
+    }
+  },
+  "issues": {
+    "light_unreachable": {
+      "title": "{name} can't be reached",
+      "description": "Commands to {name} have been failing since {since}. The schedule keeps retrying, but the light may not be following it.\n\nCheck that the light has power, that the WEEK AQUA phone app isn't connected (the light accepts one connection), and that the Raspberry Pi's Bluetooth is in range.\n\nLast error: {error}\n\nThis notice disappears by itself once a command gets through."
     }
   }
 }
