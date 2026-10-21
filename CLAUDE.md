@@ -89,7 +89,7 @@ Home Assistant's test tools are made for Linux/macOS; on Windows run them in WSL
 (`wsl`, then the commands above) if they won't install natively. GitHub Actions
 also runs them on every push (`.github/workflows/release.yml`).
 
-Test notes: tests fake the Bluetooth client (`fake_client`) and check the exact
+Test notes: `conftest.py` mocks the setup of HA's bluetooth/bluetooth_adapters/usb components (they depend on the machine and broke when GitHub's runner image changed); CI is pinned to `ubuntu-24.04`. Tests fake the Bluetooth client (`fake_client`) and check the exact
 bytes sent. Patching `asyncio.sleep` in `device` patches it globally — only
 freeze long waits. Fake clocks via `loop.time` must not be active while waiting
 for HA's own time triggers.
