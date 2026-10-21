@@ -16,7 +16,8 @@ A sensor showing the day's light as **full-power hours**: the integral of total 
 
 A view of the whole day: R, G, B and UV over 24 h with sunrise and sunset ramps, the Off times, the current time, and the effect of acclimation and the CO₂ fallback.
 
-- First step: a sensor with the day's planned curve (time → channel levels) in its attributes, plus a ready-made dashboard card config for a chart card (e.g. ApexCharts card from HACS).
+- Done in part: the dashboard card has a 24-hour graph of the **Power** sensor (what actually happened).
+- Next step: a sensor with the day's planned curve (time → channel levels) in its attributes, plus a ready-made dashboard card config for a chart card (e.g. ApexCharts card from HACS).
 - Possible later: a custom card with drag-to-edit schedule points (a separate frontend project, much larger).
 
 ## Ideas

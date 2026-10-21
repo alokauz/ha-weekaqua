@@ -101,6 +101,10 @@ bytes sent. Patching `asyncio.sleep` in `device` patches it globally — only
 freeze long waits. Fake clocks via `loop.time` must not be active while waiting
 for HA's own time triggers.
 
+## Dashboard card
+
+`dashboard/weekaqua-card.yaml` is a ready-made card (standard cards only). `tests/test_dashboard.py` checks that every entity it uses exists and renders its **Today** markdown template in HA's template engine. When entities, names or sensor texts change, update the card and run the tests. In the template use `strptime` for date-only attributes (not `as_timestamp`, which shifts dates by the UTC offset) and keep Jinja whitespace control so lines don't run together or indent into code blocks.
+
 ## Backlog
 
 `BACKLOG.md` lists planned features, items waiting for a decision, and ideas. When an item ships, remove it there and describe it in `CHANGELOG.md`. Items under "Waiting for a decision" need the owner's answer first.

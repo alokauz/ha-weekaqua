@@ -1,0 +1,127 @@
+# Week Aqua dashboard card
+# Dashboard → ⋮ → Edit dashboard → Add card → Manual, paste everything below.
+# Your entity IDs start with the light's name; if yours isn't
+# "b3_0_l600pro_71", replace that text everywhere (also in the template line
+# "{% set p = ... %}").
+type: vertical-stack
+cards:
+  - type: tile
+    entity: light.b3_0_l600pro_71
+    name: Aquarium light
+    icon: mdi:fishbowl-outline
+    state_content:
+      - state
+      - brightness
+      - effect
+    features:
+      - type: light-brightness
+
+  - type: tile
+    entity: select.b3_0_l600pro_71_preset
+    name: Preset
+    features:
+      - type: select-options
+
+  - type: grid
+    columns: 4
+    square: false
+    cards:
+      - type: tile
+        entity: switch.b3_0_l600pro_71_schedule
+        name: Schedule
+        vertical: true
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: switch.b3_0_l600pro_71_maintenance_mode
+        name: Maintenance
+        vertical: true
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: switch.b3_0_l600pro_71_photo_mode
+        name: Photo
+        vertical: true
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: switch.b3_0_l600pro_71_acclimation
+        name: Acclimation
+        vertical: true
+        tap_action:
+          action: toggle
+
+  - type: markdown
+    title: Today
+    content: |
+      {%- set p = 'b3_0_l600pro_71' -%}
+      {%- set conn = states('binary_sensor.' ~ p ~ '_connection') -%}
+      {%- set co2 = states('binary_sensor.' ~ p ~ '_co2_ready') -%}
+      {%- set mode_m = is_state('switch.' ~ p ~ '_maintenance_mode', 'on') -%}
+      {%- set mode_p = is_state('switch.' ~ p ~ '_photo_mode', 'on') -%}
+      {%- if conn == 'off' %}
+      <ha-alert alert-type="error">The light can't be reached: {{ state_attr('binary_sensor.' ~ p ~ '_connection', 'last_error') }}</ha-alert>
+      {% endif -%}
+      {%- if co2 == 'off' and states('sensor.' ~ p ~ '_power') | float(0) > 0 %}
+      <ha-alert alert-type="warning">CO₂ isn't ready ({{ state_attr('binary_sensor.' ~ p ~ '_co2_ready', 'reason') }}), so the light runs at reduced brightness.</ha-alert>
+      {% endif -%}
+      {%- if mode_m or mode_p -%}
+      {%- set sw = 'switch.' ~ p ~ ('_maintenance_mode' if mode_m else '_photo_mode') %}
+      <ha-alert alert-type="info">{{ 'Maintenance' if mode_m else 'Photo' }} mode until {{ as_timestamp(state_attr(sw, 'ends_at')) | timestamp_custom('%H:%M') }}, then back to the schedule.</ha-alert>
+      {% endif %}
+      **Now:** {{ states('sensor.' ~ p ~ '_current_step') }}
+
+      **Channels** ({{ state_attr('sensor.' ~ p ~ '_step_channels', 'applies') or '–' }}): {{ states('sensor.' ~ p ~ '_step_channels') }} · power {{ state_attr('sensor.' ~ p ~ '_step_channels', 'power') or '–' }}
+
+      {% set nxt = states('sensor.' ~ p ~ '_next_step') -%}
+      {%- if nxt not in ['unknown', 'unavailable', 'none'] -%}
+      **Next at {{ as_timestamp(nxt) | timestamp_custom('%H:%M') }}:** {{ state_attr('sensor.' ~ p ~ '_next_step', 'step') }}{% if state_attr('sensor.' ~ p ~ '_next_step', 'also') %} · also {{ state_attr('sensor.' ~ p ~ '_next_step', 'also') }}{% endif %}
+      {%- else -%}
+      **Next:** schedule switched off
+      {%- endif %}
+
+      **Day:** {{ states('sensor.' ~ p ~ '_all_steps') }}
+      {%- if not is_state('sensor.' ~ p ~ '_co2_schedule', 'unavailable') %}
+
+      **CO₂:** {{ states('sensor.' ~ p ~ '_co2_schedule') }}
+      {%- endif %}
+      {%- set acc = states('sensor.' ~ p ~ '_acclimation') -%}
+      {%- set nc = state_attr('sensor.' ~ p ~ '_acclimation', 'next_change') -%}
+      {%- set btn = state_attr('sensor.' ~ p ~ '_acclimation', 'back_to_normal') -%}
+      {%- if acc not in ['Not running', 'unknown', 'unavailable'] %}
+
+      **Acclimation:** {{ acc }}{% if nc %} · next step {{ strptime(nc, '%Y-%m-%d').strftime('%d %b') }}{% endif %}{% if btn %} · normal from {{ strptime(btn, '%Y-%m-%d').strftime('%d %b') }}{% endif %}
+      {%- endif %}
+
+  - type: horizontal-stack
+    cards:
+      - type: gauge
+        entity: sensor.b3_0_l600pro_71_power
+        name: Power
+        min: 0
+        max: 100
+        severity:
+          green: 0
+          yellow: 90
+          red: 100
+      - type: history-graph
+        title: Light today
+        hours_to_show: 24
+        entities:
+          - entity: sensor.b3_0_l600pro_71_power
+            name: Power
+
+  - type: entities
+    title: Channels
+    show_header_toggle: false
+    entities:
+      - entity: number.b3_0_l600pro_71_1_r
+        name: Red
+      - entity: number.b3_0_l600pro_71_2_g
+        name: Green
+      - entity: number.b3_0_l600pro_71_3_b
+        name: Blue
+      - entity: number.b3_0_l600pro_71_4_uv
+        name: UV
+      - entity: number.b3_0_l600pro_71_5_fan
+        name: Fan
