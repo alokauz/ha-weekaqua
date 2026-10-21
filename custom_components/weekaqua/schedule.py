@@ -80,6 +80,7 @@ class WeekAquaScheduler:
         self.device = device
         self.steps = sorted(steps, key=step_time)
         self.enabled = True
+        self.acclimation = None  # set in __init__.py
         self._unsubs: list[Callable[[], None]] = []
         self._listeners: list[Callable[[], None]] = []
         # Bumped whenever a newer step starts, so a retrying older step gives up.
@@ -95,10 +96,34 @@ class WeekAquaScheduler:
         for listener in list(self._listeners):
             listener()
 
+    def effective_time(self, step: dict[str, Any]) -> time:
+        """The step's time today, with acclimation moving Off steps earlier."""
+        normal = step_time(step)
+        acc = self.acclimation
+        if acc is None or step["target"] != OFF_TARGET or not acc.shorter_minutes():
+            return normal
+        minutes = normal.hour * 60 + normal.minute - acc.shorter_minutes()
+        # Not before the previous step (and its fade) has finished
+        earlier = [s for s in self.steps if step_time(s) < normal]
+        if earlier:
+            prev = earlier[-1]
+            prev_t = step_time(prev)
+            floor = prev_t.hour * 60 + prev_t.minute + int(prev.get("fade", 0)) + 1
+            minutes = max(minutes, floor)
+        minutes = max(0, min(int(minutes), normal.hour * 60 + normal.minute))
+        return time(minutes // 60, minutes % 60)
+
+    @callback
+    def reschedule(self) -> None:
+        """Re-register step times (acclimation changed the Off times)."""
+        self.stop()
+        self.start()
+        self._notify()
+
     @callback
     def start(self) -> None:
         for step in self.steps:
-            at = step_time(step)
+            at = self.effective_time(step)
             self._unsubs.append(
                 async_track_time_change(
                     self.hass, partial(self._fire, step), hour=at.hour, minute=at.minute, second=0
@@ -167,12 +192,13 @@ class WeekAquaScheduler:
         if step["target"] == OFF_TARGET:
             what = "to Off"
         elif step["target"] in dev.presets:
-            scale = step.get("brightness", 100) / 100
+            factor = self.acclimation_factor()
+            scale = step.get("brightness", 100) / 100 * factor
             levels = tuple(round(v * scale) for v in dev.presets[step["target"]])
-            what = (
-                f"to preset {step['target']!r} at {step.get('brightness', 100)}% "
-                f"({describe_levels(levels)})"
-            )
+            what = f"to preset {step['target']!r} at {step.get('brightness', 100) * factor:g}%"
+            if factor < 1:
+                what += f" (acclimation {factor * 100:g}% of {step.get('brightness', 100)}%)"
+            what += f" ({describe_levels(levels)})"
             if (fan := dev.preset_fans.get(step["target"])) is not None:
                 what += f", fan {fan:g}%"
         else:
@@ -197,9 +223,14 @@ class WeekAquaScheduler:
                 fade += f" (remaining of {describe_duration(planned)})"
             fade += f", curve {curve_text}, smoothness {smooth_text}"
         days = describe_step(step).rsplit(" · ", 1)[-1]
+        at = self.effective_time(step).strftime("%H:%M")
+        when = step["time"] if at == step["time"] else f"{at} (acclimation, normally {step['time']})"
         return (
-            f"{step['time']} ({days}): from {describe_levels(dev.levels)} {what}, {fade}"
+            f"{when} ({days}): from {describe_levels(dev.levels)} {what}, {fade}"
         )
+
+    def acclimation_factor(self) -> float:
+        return (self.acclimation.brightness() / 100) if self.acclimation else 1.0
 
     async def _apply_step(self, step: dict[str, Any], transition: float) -> None:
         interval = float(step["smoothness"]) if step.get("smoothness") else None
@@ -207,7 +238,7 @@ class WeekAquaScheduler:
         if step["target"] == OFF_TARGET:
             await self.device.set_levels((0, 0, 0, 0), transition, interval, curve)
         elif step["target"] in self.device.presets:
-            scale = step.get("brightness", 100) / 100
+            scale = step.get("brightness", 100) / 100 * self.acclimation_factor()
             await self.device.apply_preset(step["target"], transition, scale, interval, curve)
         else:
             _LOGGER.warning(
@@ -225,7 +256,7 @@ class WeekAquaScheduler:
             for step in steps:
                 if day.weekday() not in step.get("days", ALL_DAYS):
                     continue
-                when = datetime.combine(day, step_time(step), tzinfo=now.tzinfo)
+                when = datetime.combine(day, self.effective_time(step), tzinfo=now.tzinfo)
                 if (backwards and when <= now) or (not backwards and when > now):
                     yield step, when
 

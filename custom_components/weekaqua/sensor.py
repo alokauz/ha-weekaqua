@@ -39,6 +39,7 @@ async def async_setup_entry(
             WeekAquaNextStep(device),
             WeekAquaCurrentStep(device),
             WeekAquaScheduleSteps(device),
+            WeekAquaAcclimationSensor(device),
         ]
     )
 
@@ -74,10 +75,11 @@ class WeekAquaNextStep(WeekAquaEntity, SensorEntity):
         step, when = self._scheduler.next_step()
         if not self._scheduler.enabled or step is None:
             return {}
-        return {
-            "step": describe_step(step, self._device.presets),
-            "kind": self._scheduler.step_kind(step, when),
-        }
+        text = describe_step(step, self._device.presets)
+        at = self._scheduler.effective_time(step).strftime("%H:%M")
+        if at != step["time"]:
+            text = f"{at} (acclimation, normally {step['time']}) · " + text.split(" · ", 1)[1]
+        return {"step": text, "kind": self._scheduler.step_kind(step, when)}
 
 
 class WeekAquaCurrentStep(WeekAquaEntity, SensorEntity):
@@ -177,3 +179,39 @@ class WeekAquaPower(WeekAquaEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {"limit_active": self._device.power_limit}
+
+
+class WeekAquaAcclimationSensor(WeekAquaEntity, SensorEntity):
+    """'70% · 1 h 30 min shorter', 'Paused · …', 'Not running' or 'Finished'."""
+
+    _attr_translation_key = "acclimation"
+    _attr_icon = "mdi:sprout"
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "acclimation_status")
+        self._acc = device.acclimation
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._acc.add_listener(self.async_write_ha_state))
+
+    @property
+    def native_value(self) -> str:
+        return self._acc.summary()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        acc = self._acc
+        if not acc.running:
+            return {"finished": acc.state["finished"]} if acc.state["finished"] else {}
+        nxt, ends = acc.next_change(), acc.ends()
+        return {
+            "brightness": acc.brightness(),
+            "light_period_shorter_minutes": acc.shorter_minutes(),
+            "day": acc.days() + 1,
+            "stage": f"{acc.stage() + 1} of {acc.total_stages() + 1}",
+            "next_change": nxt.isoformat() if nxt else None,
+            "back_to_normal": ends.isoformat() if ends else None,
+            "started": acc.state["started"],
+            "paused": acc.paused,
+        }

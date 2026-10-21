@@ -41,6 +41,7 @@ Installed by users through HACS from this repository. Owner: Flint.
 | `const.py` | Protocol constants, command builders, presets, power formula, option keys |
 | `device.py` | `WeekAquaDevice`: BLE connection, channel state (`levels`, `target`), fades, fan, presets, power limit, listeners |
 | `schedule.py` | `WeekAquaScheduler`: schedule steps from options, firing, retries, startup catch-up, log text |
+| `acclimation.py` | Acclimation program: ramps brightness and light period up to the normal schedule, then finishes; progress in a `Store`, notifications |
 | `light.py` | RGBW light (white = UV), transitions, presets as effects |
 | `number.py` | Sliders 1. R / 2. G / 3. B / 4. UV / 5. Fan (Configuration section, slider or box) |
 | `select.py` | Preset picker (own presets first, most recently used on top) |
@@ -65,6 +66,7 @@ Installed by users through HACS from this repository. Owner: Flint.
   saving them reloads the entry.
 - Single channel sliders refuse changes above the power limit (like the app);
   everything else scales down proportionally. Lowering is always allowed.
+- Acclimation never goes beyond the normal schedule (brightness ≤ 100 % of each step, Off steps only ever earlier, never before the previous step's fade ends) and always finishes by itself. Keep it that way.
 - Never change entity `unique_id`s (users' entity IDs and automations depend on
   them). Device manufacturer stays "Week Aqua".
 - `async_at_started` and similar callbacks must be `async def` or `@callback`

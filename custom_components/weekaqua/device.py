@@ -74,6 +74,7 @@ class WeekAquaDevice:
         self.fade_interval = 10.0  # Medium; set from options in __init__.py
         self.fade_curve = "perceptual"
         self.scheduler = None  # set in __init__.py
+        self.acclimation = None  # set in __init__.py
         # Fan speed in percent, None until it has been set once.
         self.fan: float | None = None
         # App presets first, then the user's own. Custom presets may also set the fan.

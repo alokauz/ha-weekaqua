@@ -7,6 +7,8 @@ DOMAIN = "weekaqua"
 CONF_PRESETS = "presets"
 # Schedule steps, see schedule.py
 CONF_SCHEDULE = "schedule"
+# Acclimation program settings, see acclimation.py
+CONF_ACCLIMATION = "acclimation"
 # "slider" or "box" for the channel and fan controls
 CONF_INPUT_MODE = "input_mode"
 # Shortest seconds between two fade commands, and the fade curve

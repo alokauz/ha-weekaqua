@@ -92,6 +92,15 @@ Under **Configure → Add or update a schedule step**, choose a time, a preset (
 
 To let the integration (not the light) control timing, set the light's own schedule (app → *Mode* tab) to 00:00–23:59 with no ramp and press **Resume simple schedule** once.
 
+## Acclimation
+
+For a new tank, new plants or new livestock, **Configure → Acclimation** brings the light up slowly:
+
+- **Brightness** starts at a share of your schedule's brightness (e.g. 60 %) and rises by a step (e.g. 10 %) at each interval (e.g. 7 days).
+- **Light period** starts shorter (Off steps run e.g. 2 h earlier, never before the previous step's fade has ended) and gets longer by a step (e.g. 30 min) at each interval.
+- It stops at your normal schedule and **finishes by itself**, so it can't run away if you forget about it.
+- You get a **notification** at every step. The **Acclimation** sensor shows the current level, the next step and the end date. The **Acclimation** switch pauses it (the level is held and the days don't count) and resumes it.
+
 ## Sunrise and sunset with automations
 
 Automations give the most flexibility (e.g. following the real sun). Use them like this:

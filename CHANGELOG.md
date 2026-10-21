@@ -2,6 +2,11 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b2
+
+- **Acclimation** (Configure): for a new tank, new plants or new livestock. The schedule starts at lower brightness (e.g. 60 %) and a shorter light period (Off steps up to e.g. 2 h earlier), and steps up every few days until it's back at your normal schedule. It never goes beyond your normal schedule and finishes by itself.
+- A notification at every step, an **Acclimation** sensor (current level, next step, end date) and an **Acclimation** switch to pause it (holds the level and stops the day count).
+
 ## 0.10.0b1
 
 - **Edit a preset** (Configure): pick a preset from a list that shows its values (channels, fan, total power), then change them in a form filled with that preset, including its name. Renaming keeps schedule steps that use the preset working. **Show on the light now** sends the new values to the light when you save.

@@ -19,7 +19,8 @@ async def async_setup_entry(
     entry: WeekAquaConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    async_add_entities([WeekAquaScheduleSwitch(entry.runtime_data)])
+    device = entry.runtime_data
+    async_add_entities([WeekAquaScheduleSwitch(device), WeekAquaAcclimationSwitch(device)])
 
 
 class WeekAquaScheduleSwitch(WeekAquaEntity, SwitchEntity, RestoreEntity):
@@ -55,3 +56,36 @@ class WeekAquaScheduleSwitch(WeekAquaEntity, SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self._scheduler.set_enabled(False)
+
+
+class WeekAquaAcclimationSwitch(WeekAquaEntity, SwitchEntity):
+    """On = acclimation running. Off pauses it (holds the current level).
+
+    Turning it on when no program is running starts one with the settings from
+    Configure. Stopping (back to normal) is done under Configure.
+    """
+
+    _attr_translation_key = "acclimation"
+    _attr_icon = "mdi:sprout"
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "acclimation")
+        self._acc = device.acclimation
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._acc.add_listener(self.async_write_ha_state))
+
+    @property
+    def is_on(self) -> bool:
+        return self._acc.running and not self._acc.paused
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        if self._acc.paused:
+            await self._acc.async_resume()
+        elif not self._acc.running:
+            await self._acc.async_start()
+            await self._device.scheduler.apply_current()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._acc.async_pause()

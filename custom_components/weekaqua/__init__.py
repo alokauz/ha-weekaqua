@@ -8,6 +8,7 @@ from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers.start import async_at_started
 
 from .const import (
+    CONF_ACCLIMATION,
     CONF_FADE_CURVE,
     CONF_FADE_INTERVAL,
     CONF_INPUT_MODE,
@@ -16,6 +17,7 @@ from .const import (
     CONF_SCHEDULE,
     DEFAULT_FADE_INTERVAL,
 )
+from .acclimation import Acclimation
 from .device import WeekAquaDevice
 from .schedule import WeekAquaScheduler
 
@@ -41,12 +43,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: WeekAquaConfigEntry) -> 
     device.fade_curve = entry.options.get(CONF_FADE_CURVE, "perceptual")
     device.power_limit = entry.options.get(CONF_POWER_LIMIT, True)
     device.scheduler = WeekAquaScheduler(hass, device, entry.options.get(CONF_SCHEDULE, []))
+    # Acclimation program: scales On steps and moves Off steps earlier until it
+    # reaches the normal schedule, then finishes by itself.
+    device.acclimation = Acclimation(hass, entry.entry_id, entry.options.get(CONF_ACCLIMATION))
+    await device.acclimation.async_load()
+    device.scheduler.acclimation = device.acclimation
     entry.runtime_data = device
     # Remember whether HA is starting up before entities restore their state.
     starting = hass.state is not CoreState.running
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     device.scheduler.start()
     entry.async_on_unload(device.scheduler.stop)
+    entry.async_on_unload(device.acclimation.add_listener(device.scheduler.reschedule))
+    await device.acclimation.async_check()  # step up / finish if days passed while off
+    device.acclimation.start_daily_check()
+    entry.async_on_unload(device.acclimation.stop_daily_check)
     if starting:
         # After a restart, put the light where the schedule says it should be
         # (continuing a fade that was in progress). Not on reloads, so saving a

@@ -177,7 +177,7 @@ async def test_custom_presets(hass, client):
     await call("number", "set_value", {"entity_id": "number.b3_0_l600pro_71_4_uv", "value": 30}, blocking=True)
     await call("number", "set_value", {"entity_id": fan, "value": 40}, blocking=True)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["type"] is FlowResultType.MENU and flow["menu_options"] == ["add_preset", "add_schedule", "fade", "power", "display"]
+    assert flow["type"] is FlowResultType.MENU and flow["menu_options"] == ["add_preset", "add_schedule", "acclimation", "fade", "power", "display"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_preset"})
     defaults = {str(k): k.default() for k in flow["data_schema"].schema if hasattr(k, "default") and callable(k.default)}
     print(defaults)
@@ -218,7 +218,7 @@ async def test_custom_presets(hass, client):
 
     # Remove it
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["menu_options"] == ["add_preset", "edit_preset", "remove_preset", "add_schedule", "fade", "power", "display"]
+    assert flow["menu_options"] == ["add_preset", "edit_preset", "remove_preset", "add_schedule", "acclimation", "fade", "power", "display"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "remove_preset"})
     await hass.config_entries.options.async_configure(flow["flow_id"], {"remove": ["My Reef"]})
     await hass.async_block_till_done()
@@ -281,7 +281,7 @@ async def test_schedule(hass, client, freezer):
 async def test_schedule_and_display_forms(hass, client):
     entry = await setup(hass)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["menu_options"] == ["add_preset", "add_schedule", "fade", "power", "display"]
+    assert flow["menu_options"] == ["add_preset", "add_schedule", "acclimation", "fade", "power", "display"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_schedule"})
     bad = await hass.config_entries.options.async_configure(flow["flow_id"],
         {"time": "09:30:00", "target": "Fresh", "brightness": 60, "fade": 45, "days": []})
@@ -707,4 +707,80 @@ async def test_edit_preset(hass, client):
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "remove_preset"})
     labels = [o["label"] for o in next(iter(flow["data_schema"].schema.values())).config["options"]]
     assert labels[0].startswith("Afternoon — R 51% G 100% B 51% UV 10%")
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_acclimation(hass, client, freezer):
+    """60 % -> 100 % in 10 % steps and 2 h -> normal in 30 min steps, every 7 days; pause; finish."""
+    from datetime import datetime, timedelta
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "15:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    day0 = datetime(2026, 10, 1, 10, 0, 0, tzinfo=tz)
+    freezer.move_to(day0)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+                            data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options={"schedule": steps})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sensor, switch = "sensor.b3_0_l600pro_71_acclimation", "switch.b3_0_l600pro_71_acclimation"
+    nxt = "sensor.b3_0_l600pro_71_next_step"
+    assert hass.states.get(sensor).state == "Not running"
+
+    # Configure -> Acclimation: preview, then start
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "acclimation"})
+    print(flow["description_placeholders"]["plan"])
+    assert flow["description_placeholders"]["plan"] == "60% → 100% brightness, light period 2 h shorter → normal: 4 steps, back to normal after 28 days."
+    bad = await hass.config_entries.options.async_configure(flow["flow_id"],
+        {"start_brightness": 60, "brightness_step": 0, "interval_days": 7, "shorten": 120, "shorten_step": 30, "action": "start"})
+    assert bad["errors"] == {"brightness_step": "step_zero"}
+    await hass.config_entries.options.async_configure(bad["flow_id"],
+        {"start_brightness": 60, "brightness_step": 10, "interval_days": 7, "shorten": 120, "shorten_step": 30, "action": "start"})
+    await hass.async_block_till_done()
+    st = hass.states.get(sensor)
+    print(st.state, st.attributes)
+    assert st.state == "60% · 2 h shorter"
+    assert st.attributes["next_change"] == "2026-10-08" and st.attributes["back_to_normal"] == "2026-10-29"
+    assert hass.states.get(switch).state == "on"
+    # Off step moved 2 h earlier
+    assert hass.states.get(nxt).attributes["step"].startswith("15:00 · On")
+    sched = entry.runtime_data.scheduler
+    assert sched.effective_time(steps[1]).strftime("%H:%M") == "19:00"
+
+    async def run_on_step():
+        client.write_gatt_char.reset_mock()
+        await sched._run(sched.steps[0], 0)
+        await hass.async_block_till_done()
+        return sent(client)[-1]
+
+    # On step at 60 %: Nature (77 EB 77 00) * 0.6 = 47 8D 47 00
+    assert await run_on_step() == "FBF9478D47005555"
+
+    # One week later at midnight: 70 %, 1 h 30 min shorter
+    freezer.move_to(datetime(2026, 10, 8, 0, 0, 10, tzinfo=tz)); async_fire_time_changed(hass); await hass.async_block_till_done()
+    assert hass.states.get(sensor).state == "70% · 1 h 30 min shorter"
+    assert sched.effective_time(steps[1]).strftime("%H:%M") == "19:30"
+    freezer.move_to(datetime(2026, 10, 8, 16, 0, 0, tzinfo=tz)); sched._notify(); await hass.async_block_till_done()
+    assert hass.states.get(nxt).attributes["step"] == "19:30 (acclimation, normally 21:00) · Off · every day"
+    assert await run_on_step() == "FBF953A453005555"     # 0.7
+
+    # Pause for 3 days: level held, dates move by 3 days
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch}, blocking=True)
+    freezer.move_to(datetime(2026, 10, 18, 0, 0, 10, tzinfo=tz)); async_fire_time_changed(hass); await hass.async_block_till_done()
+    assert hass.states.get(sensor).state.startswith("Paused · 70%")
+    freezer.move_to(datetime(2026, 10, 11, 12, 0, 0, tzinfo=tz))   # back to the 11th: paused 3 days (8th -> 11th)
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch}, blocking=True)
+    assert hass.states.get(sensor).attributes["back_to_normal"] == "2026-11-01"
+
+    # Long after the end: finishes by itself, normal schedule again
+    freezer.move_to(datetime(2026, 11, 2, 0, 0, 10, tzinfo=tz)); async_fire_time_changed(hass); await hass.async_block_till_done()
+    assert hass.states.get(sensor).state == "Finished"
+    assert hass.states.get(switch).state == "off"
+    assert sched.effective_time(steps[1]).strftime("%H:%M") == "21:00"
+    assert await run_on_step() == "FBF977EB77005555"     # 100 % again
     assert await hass.config_entries.async_unload(entry.entry_id)

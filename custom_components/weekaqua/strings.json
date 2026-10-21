@@ -54,6 +54,9 @@
     "switch": {
       "schedule": {
         "name": "Schedule"
+      },
+      "acclimation": {
+        "name": "Acclimation"
       }
     },
     "sensor": {
@@ -68,6 +71,9 @@
       },
       "power": {
         "name": "Power"
+      },
+      "acclimation": {
+        "name": "Acclimation"
       }
     }
   },
@@ -83,7 +89,8 @@
           "display": "Slider or number input",
           "fade": "Fade smoothness and curve",
           "power": "Power limit",
-          "edit_preset": "Edit a preset"
+          "edit_preset": "Edit a preset",
+          "acclimation": "Acclimation (bring the tank up slowly)"
         }
       },
       "add_preset": {
@@ -174,6 +181,23 @@
         "data_description": {
           "apply": "Sends the new values to the light when you submit."
         }
+      },
+      "acclimation": {
+        "title": "Acclimation",
+        "description": "For a new tank, new plants or new livestock: the schedule starts at lower brightness and a shorter light period, and steps up to your normal schedule. It never goes beyond your normal schedule and finishes by itself. You get a notification at every step; the Acclimation switch pauses it.\n\nNow: {status}\nWith these settings: {plan}{off_note}",
+        "data": {
+          "start_brightness": "Start brightness",
+          "brightness_step": "Brightness step",
+          "interval_days": "Step every",
+          "shorten": "Light period shorter at the start",
+          "shorten_step": "Light period step",
+          "action": "What to do"
+        },
+        "data_description": {
+          "start_brightness": "Of your schedule's brightness (100 % = normal).",
+          "shorten": "Off steps run this much earlier at the start (0 = keep the normal light period).",
+          "shorten_step": "How much longer the light period gets at each step."
+        }
       }
     },
     "error": {
@@ -182,7 +206,9 @@
       "no_days": "Choose at least one day.",
       "too_much_power": "These values add up to more than 100 % total power. Lower one or more channels (R counts 39 %, G 41 %, B 53 %, UV 11 % at full).",
       "name_exists": "You already have a preset with this name. Use Edit a preset to change it.",
-      "cannot_apply": "Couldn't reach the light to show the preset (is the phone app connected?). Untick Show on the light now to just save it."
+      "cannot_apply": "Couldn't reach the light to show the preset (is the phone app connected?). Untick Show on the light now to just save it.",
+      "step_zero": "With a step of 0 the program would never reach your normal schedule.",
+      "nothing_to_do": "Start brightness is 100 % and the light period isn't shortened, so there's nothing to do."
     }
   }
 }

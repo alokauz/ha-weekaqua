@@ -33,6 +33,7 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     CHANNELS,
+    CONF_ACCLIMATION,
     CONF_FADE_CURVE,
     CONF_FADE_INTERVAL,
     CURVE_LABELS,
@@ -47,6 +48,7 @@ from .const import (
     PRESETS,
     total_power,
 )
+from .acclimation import DEFAULTS as ACCLIMATION_DEFAULTS, Acclimation, describe_minutes
 from .schedule import ALL_DAYS, DAY_NAMES, OFF_TARGET, describe_step, step_time
 
 CONF_FAN = "fan"
@@ -159,6 +161,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
         menu.append("add_schedule")
         if self._steps():
             menu.append("remove_schedule")
+        menu.append("acclimation")
         menu.append("fade")
         menu.append("power")
         menu.append("display")
@@ -256,6 +259,80 @@ class WeekAquaOptionsFlow(OptionsFlow):
                     )
                 }
             ),
+        )
+
+    async def async_step_acclimation(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Settings and start/stop of the acclimation program."""
+        device = self.config_entry.runtime_data
+        acc = device.acclimation
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            settings = {k: user_input[k] for k in ACCLIMATION_DEFAULTS}
+            for key in ("start_brightness", "brightness_step", "interval_days", "shorten", "shorten_step"):
+                settings[key] = int(settings[key])
+            action = user_input.get("action", "save")
+            if settings["start_brightness"] < 100 and settings["brightness_step"] <= 0:
+                errors["brightness_step"] = "step_zero"
+            elif settings["shorten"] > 0 and settings["shorten_step"] <= 0:
+                errors["shorten_step"] = "step_zero"
+            elif action == "start" and settings["start_brightness"] >= 100 and settings["shorten"] <= 0:
+                errors["base"] = "nothing_to_do"
+            if not errors:
+                if action == "start":
+                    acc.settings = {**acc.settings, **settings}
+                    await acc.async_start()
+                    await device.scheduler.apply_current()
+                elif action == "stop":
+                    await acc.async_stop()
+                    await device.scheduler.apply_current()
+                return self._save(**{CONF_ACCLIMATION: settings})
+
+        values = user_input or acc.settings
+        def number(maximum: int, unit: str, minimum: int = 0) -> NumberSelector:
+            return NumberSelector(
+                NumberSelectorConfig(min=minimum, max=maximum, step=1, unit_of_measurement=unit, mode=NumberSelectorMode.BOX)
+            )
+        actions = [SelectOptionDict(value="save", label="Save settings only")]
+        actions.append(SelectOptionDict(value="start", label="Restart from the beginning now" if acc.running else "Start now"))
+        if acc.running:
+            actions.append(SelectOptionDict(value="stop", label="Stop: back to the normal schedule now"))
+        schema = vol.Schema(
+            {
+                vol.Required("start_brightness", default=values["start_brightness"]): number(100, "%", 10),
+                vol.Required("brightness_step", default=values["brightness_step"]): number(50, "%"),
+                vol.Required("interval_days", default=values["interval_days"]): number(60, "days", 1),
+                vol.Required("shorten", default=values["shorten"]): number(480, "min"),
+                vol.Required("shorten_step", default=values["shorten_step"]): number(240, "min"),
+                vol.Required("action", default="save"): SelectSelector(
+                    SelectSelectorConfig(options=actions, mode=SelectSelectorMode.LIST)
+                ),
+            }
+        )
+        # Preview of what the shown settings do
+        preview = Acclimation(self.hass, self.config_entry.entry_id, {k: values[k] for k in ACCLIMATION_DEFAULTS})
+        stages = preview.total_stages()
+        days = stages * int(values["interval_days"])
+        plan = (
+            f"{values['start_brightness']:g}% → 100% brightness"
+            + (f", light period {describe_minutes(values['shorten'])} shorter → normal" if values["shorten"] else "")
+            + f": {stages} steps, back to normal after {days} days."
+            if stages else "These settings change nothing."
+        )
+        status = acc.summary()
+        if acc.running and acc.ends():
+            status += f" (back to normal on {acc.ends():%d %b %Y})"
+        has_off = any(s["target"] == "__off__" for s in self._steps())
+        return self.async_show_form(
+            step_id="acclimation",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "status": status,
+                "plan": plan,
+                "off_note": "" if has_off else "\n\nNote: your schedule has no Off step, so the light period can't be shortened.",
+            },
         )
 
     async def async_step_fade(
