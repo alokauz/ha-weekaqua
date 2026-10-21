@@ -19,19 +19,6 @@ A view of the whole day: R, G, B and UV over 24 h with sunrise and sunset ramps,
 - First step: a sensor with the day's planned curve (time → channel levels) in its attributes, plus a ready-made dashboard card config for a chart card (e.g. ApexCharts card from HACS).
 - Possible later: a custom card with drag-to-edit schedule points (a separate frontend project, much larger).
 
-## Waiting for a decision
-
-### CO₂ control from the integration
-
-Switch the CO₂ plug from the light schedule: on a lead time before the first On step, off a set time before the last Off step.
-
-Only with these safety rules:
-- a hard daily maximum on-time, never on at night;
-- CO₂ off when the schedule is switched off or the integration stops;
-- **a backstop outside Home Assistant** (plug with a built-in auto-off/countdown, or a mechanical timer in front of the plug), because a crashed Home Assistant leaves a smart plug in its last state.
-
-Open question: which backstop the owner's setup will use.
-
 ## Ideas
 
 - **Other Week Aqua models**: model codes 5745 and 5747–5752 use other protocols (already in the decompiled app); needs owners of those lights to test.

@@ -91,6 +91,7 @@ class WeekAquaDevice:
         self.scheduler = None  # set in __init__.py
         self.acclimation = None  # set in __init__.py
         self.co2 = None  # set in __init__.py
+        self.co2_control = None  # set in __init__.py
         self.modes: dict[str, dict] = {}  # set in __init__.py
         # Fan speed in percent, None until it has been set once.
         self.fan: float | None = None

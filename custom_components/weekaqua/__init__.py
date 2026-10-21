@@ -22,6 +22,7 @@ from .const import (
 )
 from .acclimation import Acclimation
 from .co2 import CO2Interlock
+from .co2_control import CO2Control
 from .device import WeekAquaDevice
 from .schedule import WeekAquaScheduler
 
@@ -58,6 +59,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: WeekAquaConfigEntry) -> 
     # CO₂ interlock: holds On steps at a fallback brightness until CO₂ is ready
     device.co2 = CO2Interlock(hass, entry.options.get(CONF_CO2), starting)
     device.scheduler.co2 = device.co2
+    # CO₂ control: switches the CO₂ plug from the light schedule (optional)
+    device.co2_control = CO2Control(hass, device.scheduler, entry.options.get(CONF_CO2), starting)
+    device.scheduler.co2_control = device.co2_control
     # Maintenance / photo mode settings
     device.modes = {**DEFAULT_MODES, **entry.options.get(CONF_MODES, {})}
     entry.runtime_data = device
@@ -71,12 +75,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: WeekAquaConfigEntry) -> 
     entry.async_on_unload(device.co2.add_listener(device.scheduler.co2_changed))
     device.co2.start()
     entry.async_on_unload(device.co2.stop)
+    device.co2_control.start()
+    entry.async_on_unload(device.co2_control.stop)
     entry.async_on_unload(device.scheduler._cancel_override_timer)
     if starting:
         # After a restart, put the light where the schedule says it should be
         # (continuing a fade that was in progress). Not on reloads, so saving a
         # preset doesn't undo a manual change.
         async def _catch_up(_hass: HomeAssistant) -> None:
+            await device.co2_control.catch_up()
             await device.scheduler.apply_current()
 
         entry.async_on_unload(async_at_started(hass, _catch_up))

@@ -57,6 +57,7 @@ from .const import (
 )
 from .device import describe_levels
 from .co2 import DEFAULTS as CO2_DEFAULTS
+from .co2_control import CONTROLLABLE_DOMAINS as CO2_CONTROLLABLE, DEFAULTS as CO2_CONTROL_DEFAULTS
 from .acclimation import DEFAULTS as ACCLIMATION_DEFAULTS, Acclimation, describe_minutes
 from .schedule import ALL_DAYS, DAY_NAMES, OFF_TARGET, describe_step, step_time
 
@@ -372,17 +373,26 @@ class WeekAquaOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """CO₂ interlock: hold On steps at a fallback brightness until CO₂ is ready."""
-        current = {**CO2_DEFAULTS, **self.config_entry.options.get(CONF_CO2, {})}
+        current = {**CO2_DEFAULTS, **CO2_CONTROL_DEFAULTS, **self.config_entry.options.get(CONF_CO2, {})}
         errors: dict[str, str] = {}
         if user_input is not None:
-            if user_input.get("enabled") and not user_input.get("entity_id"):
+            entity = user_input.get("entity_id")
+            if (user_input.get("enabled") or user_input.get("control")) and not entity:
                 errors["entity_id"] = "co2_entity_missing"
+            elif user_input.get("control") and entity.split(".")[0] not in CO2_CONTROLLABLE:
+                errors["entity_id"] = "co2_not_switchable"
+            elif user_input.get("control") and not user_input.get("backstop"):
+                errors["backstop"] = "co2_backstop_required"
             else:
                 return self._save(**{CONF_CO2: {
                     "enabled": bool(user_input.get("enabled")),
-                    "entity_id": user_input.get("entity_id"),
+                    "entity_id": entity,
                     "lead": int(user_input["lead"]),
                     "fallback": int(user_input["fallback"]),
+                    "control": bool(user_input.get("control")),
+                    "on_before": int(user_input["on_before"]),
+                    "off_before": int(user_input["off_before"]),
+                    "max_hours": float(user_input["max_hours"]),
                 }})
             current = {**current, **user_input}
         entity_key = (
@@ -397,9 +407,17 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 entity_key: EntitySelector(EntitySelectorConfig(domain=["switch", "input_boolean", "binary_sensor", "light"])),
                 vol.Required("lead", default=current["lead"]): NumberSelector(NumberSelectorConfig(min=0, max=240, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)),
                 vol.Required("fallback", default=current["fallback"]): NumberSelector(NumberSelectorConfig(min=0, max=100, step=5, unit_of_measurement="%", mode=NumberSelectorMode.BOX)),
+                vol.Required("control", default=current["control"]): bool,
+                vol.Required("on_before", default=current["on_before"]): NumberSelector(NumberSelectorConfig(min=0, max=240, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)),
+                vol.Required("off_before", default=current["off_before"]): NumberSelector(NumberSelectorConfig(min=0, max=240, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)),
+                vol.Required("max_hours", default=current["max_hours"]): NumberSelector(NumberSelectorConfig(min=1, max=16, step=0.5, unit_of_measurement="h", mode=NumberSelectorMode.BOX)),
+                vol.Required("backstop", default=bool(current["control"])): bool,
             }),
             errors=errors,
-            description_placeholders={"status": status},
+            description_placeholders={
+                "status": status,
+                "control_status": self.config_entry.runtime_data.co2_control.summary(),
+            },
         )
 
     async def async_step_modes(

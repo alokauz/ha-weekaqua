@@ -1124,3 +1124,110 @@ async def test_acclimation_step_back_and_plan(hass, client, freezer):
     assert acc.next_change().isoformat() == "2026-10-23"                 # a full week at 70 % from today
     assert acc.ends().isoformat() == "2026-11-06"
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+def _co2_entry(hass, extra=None, schedule=None):
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = schedule or [
+        {"time": "15:00", "target": "Nature", "brightness": 100, "fade": 60, "days": every},
+        {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 60, "days": every},
+    ]
+    co2 = {"enabled": True, "entity_id": "switch.co2_plug", "lead": 60, "fallback": 50,
+           "control": True, "on_before": 60, "off_before": 60, "max_hours": 10, **(extra or {})}
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+                            data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+                            options={"schedule": steps, "co2": co2})
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_co2_control_day(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
+
+    tz = dt_util.get_default_time_zone()
+    on_calls = async_mock_service(hass, "homeassistant", "turn_on")
+    off_calls = async_mock_service(hass, "homeassistant", "turn_off")
+    freezer.move_to(datetime(2026, 10, 16, 12, 0, 0, tzinfo=tz))
+    hass.states.async_set("switch.co2_plug", "off")
+    entry = _co2_entry(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sensor = "sensor.b3_0_l600pro_71_co2_schedule"
+    # CO₂ 60 min before the 15:00 On step, off 60 min before the light is fully off at 21:00
+    assert hass.states.get(sensor).state == "14:00–20:00 (6 h)"
+
+    async def at(h, m):
+        freezer.move_to(datetime(2026, 10, 16, h, m, 0, tzinfo=tz))
+        async_fire_time_changed(hass)
+        await let_loop_run()
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    await at(13, 59); assert len(on_calls) == 0
+    await at(14, 0);  assert len(on_calls) == 1 and on_calls[0].data["entity_id"] == "switch.co2_plug"
+    hass.states.async_set("switch.co2_plug", "on"); await let_loop_run()
+    # Interlock: CO₂ on since 14:00 -> ready at 15:00, so the 15:00 sunrise goes to full Nature
+    await at(15, 0)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get("binary_sensor.b3_0_l600pro_71_co2_ready").state == "on"
+    assert sent(client)[-1] == "FBF977EB77005555"
+    await at(19, 59); assert len(off_calls) == 0
+    await at(20, 0);  assert len(off_calls) == 1
+    hass.states.async_set("switch.co2_plug", "off"); await let_loop_run()
+
+    # Someone turns CO₂ on at night: switched off within a minute, with a warning
+    hass.states.async_set("switch.co2_plug", "on"); await let_loop_run()
+    await at(23, 0)
+    assert len(off_calls) == 2
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_co2_control_limits(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+    from homeassistant.core import CoreState
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
+
+    tz = dt_util.get_default_time_zone()
+    on_calls = async_mock_service(hass, "homeassistant", "turn_on")
+    off_calls = async_mock_service(hass, "homeassistant", "turn_off")
+
+    # HA starts at 16:00 with CO₂ off (it was down at 14:00): catch up, CO₂ on
+    freezer.move_to(datetime(2026, 10, 16, 16, 0, 0, tzinfo=tz))
+    hass.set_state(CoreState.not_running)
+    hass.states.async_set("switch.co2_plug", "off")
+    entry = _co2_entry(hass, {"max_hours": 4})
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    # The 4 h maximum shortens the window: 16:00-20:00
+    assert hass.states.get("sensor.b3_0_l600pro_71_co2_schedule").state == "16:00–20:00 (shortened to the 4 h maximum) (4 h)"
+    assert len(on_calls) == 1
+    hass.states.async_set("switch.co2_plug", "on"); await let_loop_run()
+
+    # Schedule switched off: CO₂ off too
+    await hass.services.async_call("switch", "turn_off", {"entity_id": "switch.b3_0_l600pro_71_schedule"}, blocking=True)
+    assert len(off_calls) == 1
+    assert hass.states.get("sensor.b3_0_l600pro_71_co2_schedule").state == "Off today (the schedule is switched off)"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_co2_control_form_safety(hass, client):
+    entry = await setup(hass)
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "co2"})
+    base = {"enabled": True, "entity_id": "switch.co2_plug", "lead": 60, "fallback": 50,
+            "control": True, "on_before": 60, "off_before": 60, "max_hours": 9}
+    res = await hass.config_entries.options.async_configure(flow["flow_id"], {**base, "backstop": False})
+    assert res["errors"] == {"backstop": "co2_backstop_required"}
+    res = await hass.config_entries.options.async_configure(res["flow_id"], {**base, "entity_id": "binary_sensor.co2", "backstop": True})
+    assert res["errors"] == {"entity_id": "co2_not_switchable"}
+    res = await hass.config_entries.options.async_configure(res["flow_id"], {**base, "backstop": True})
+    assert res["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert entry.options["co2"]["control"] is True and entry.options["co2"]["max_hours"] == 9
+    assert await hass.config_entries.async_unload(entry.entry_id)

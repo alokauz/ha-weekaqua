@@ -41,6 +41,7 @@ async def async_setup_entry(
             WeekAquaScheduleSteps(device),
             WeekAquaAcclimationSensor(device),
             WeekAquaLastCommand(device),
+            WeekAquaCO2Schedule(device),
         ]
     )
 
@@ -255,3 +256,38 @@ class WeekAquaLastCommand(WeekAquaEntity, SensorEntity):
     @property
     def native_value(self):
         return self._device.last_success
+
+
+class WeekAquaCO2Schedule(WeekAquaEntity, SensorEntity):
+    """Today's CO₂ window when CO₂ control is on, e.g. '14:00–20:00 (6 h)'."""
+
+    _attr_translation_key = "co2_schedule"
+    _attr_icon = "mdi:molecule-co2"
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "co2_schedule")
+        self._control = device.co2_control
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._device.scheduler.add_listener(self.async_write_ha_state))
+
+    @property
+    def available(self) -> bool:
+        return self._control.enabled
+
+    @property
+    def native_value(self) -> str:
+        return self._control.summary()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        on, off, _ = self._control.window()
+        return {
+            "on_at": on.isoformat() if on else None,
+            "off_at": off.isoformat() if off else None,
+            "on_before_first_on_step_minutes": self._control.on_before,
+            "off_before_last_off_step_minutes": self._control.off_before,
+            "max_hours": self._control.max_hours,
+            "co2_entity": self._control.entity_id,
+        }

@@ -92,6 +92,7 @@ class WeekAquaScheduler:
         self.enabled = True
         self.acclimation = None  # set in __init__.py
         self.co2 = None  # set in __init__.py
+        self.co2_control = None  # set in __init__.py
         # Maintenance / photo mode: {"mode", "preset", "until"} while active
         self.override: dict[str, Any] | None = None
         self._override_timer: Callable[[], None] | None = None
@@ -468,5 +469,7 @@ class WeekAquaScheduler:
     async def set_enabled(self, enabled: bool) -> None:
         self.enabled = enabled
         self._notify()
+        if not enabled and self.co2_control:
+            await self.co2_control.schedule_switched_off()
         if enabled:
             await self.apply_current()

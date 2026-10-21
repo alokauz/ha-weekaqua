@@ -2,6 +2,12 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b7
+
+- **CO₂ control** (Configure → CO₂, optional): switches the CO₂ plug from the light schedule. On a set time before the day's first On step, off a set time before the last Off step, never longer than a daily maximum. A watchdog switches CO₂ off within a minute whenever it is on outside that window (at night, with the schedule switched off, or turned on by hand) and notifies you. If Home Assistant wasn't running when the window started, CO₂ is switched on when it starts.
+- Requires confirming a **backstop in the plug itself** (an off-only schedule or auto-off), because Home Assistant can't switch the plug while it isn't running. CO₂ is deliberately not switched off on restarts.
+- New **CO₂ schedule** sensor, e.g. `14:00–20:00 (6 h)`.
+
 ## 0.10.0b6
 
 - **CO₂ interlock** (Configure): choose the entity that switches your CO₂ (e.g. the solenoid's smart plug). If it hasn't been on for the lead time when an On step runs, or turns off or becomes unavailable while the light is on, the light is held at a fallback brightness and you get a notification; it comes back up by itself once CO₂ is ready. A plug that is already on when Home Assistant restarts counts as ready. New **CO₂ ready** sensor with the reason.

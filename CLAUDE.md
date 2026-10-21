@@ -43,6 +43,7 @@ Installed by users through HACS from this repository. Owner: Flint.
 | `schedule.py` | `WeekAquaScheduler`: schedule steps from options, firing, retries, startup catch-up, log text |
 | `acclimation.py` | Acclimation program: ramps brightness and light period up to the normal schedule, then finishes; progress in a `Store`, notifications |
 | `co2.py` | CO₂ interlock: watches the CO₂ plug entity, ready after the lead time, fallback factor; treats a plug already on at HA start as ready |
+| `co2_control.py` | Optional CO₂ control: plug on before the first On step, off before the last Off step, daily maximum, per-minute watchdog switching it off outside the window |
 | `binary_sensor.py` | Connection, CO₂ ready |
 | `diagnostics.py` | Download diagnostics |
 | `light.py` | RGBW light (white = UV), transitions, presets as effects |
@@ -69,6 +70,7 @@ Installed by users through HACS from this repository. Owner: Flint.
 - Options (presets, schedule, settings) live in the config entry's `options`;
   saving them reloads the entry.
 - Brightness factors multiply: step brightness × acclimation × CO₂ fallback. The CO₂ interlock and acclimation only ever lower the light. Maintenance/photo mode (`Scheduler.override`) skips steps and fades back to the schedule when it ends.
+- CO₂ control safety: CO₂ may only be on inside the day's window (watchdog every minute switches it off otherwise, incl. schedule off). It must never be switched off on restart/reload (would cut CO₂ and make the interlock dim the light). The Configure form requires confirming a backstop in the plug itself. With control disabled, nothing CO₂-control-related may run.
 - The power limit applies to everything, app presets included (no exemptions). Single channel sliders refuse changes above the power limit (like the app);
   everything else scales down proportionally. Lowering is always allowed.
 - Acclimation never goes beyond the normal schedule (brightness ≤ 100 % of each step, Off steps only ever earlier, never before the previous step's fade ends) and always finishes by itself. Keep it that way.

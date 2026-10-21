@@ -63,4 +63,5 @@ async def async_get_config_entry_diagnostics(
         },
         "acclimation": {"settings": acc.settings, "state": acc.state, "summary": acc.summary()},
         "co2": device.co2.diagnostics(),
+        "co2_control": device.co2_control.diagnostics(),
     }

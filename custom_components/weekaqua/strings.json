@@ -83,6 +83,9 @@
       },
       "last_command": {
         "name": "Last command"
+      },
+      "co2_schedule": {
+        "name": "CO₂ schedule"
       }
     },
     "binary_sensor": {
@@ -108,7 +111,7 @@
           "power": "Power limit",
           "edit_preset": "Edit a preset",
           "acclimation": "Acclimation (bring the tank up slowly)",
-          "co2": "CO₂ interlock",
+          "co2": "CO₂ (interlock and control)",
           "modes": "Maintenance and photo modes"
         }
       },
@@ -228,17 +231,24 @@
         }
       },
       "co2": {
-        "title": "CO₂ interlock",
-        "description": "Don't give the plants full light without CO₂. Choose the entity that switches your CO₂ (e.g. the solenoid's smart plug). If it hasn't been on for the lead time when an On step runs, or turns off while the light is on, the light is held at the fallback brightness and you get a notification. It comes back up by itself once CO₂ is ready.\n\nThe interlock only checks that the plug is on, not how much CO₂ is in the water, and it never switches the CO₂ itself.\n\nNow: {status}",
+        "title": "CO₂",
+        "description": "**Interlock**: don't give the plants full light without CO₂. If the CO₂ entity hasn't been on for the lead time when an On step runs, or turns off while the light is on, the light is held at the fallback brightness until CO₂ is ready. It only checks that the plug is on, not how much CO₂ is in the water.\n\nNow: {status}\n\n**CO₂ control** (optional): switch the CO₂ plug from the light schedule: on before the day's first On step, off before the last Off step, never longer than the maximum. Every minute, CO₂ is switched off if it's on outside that window (at night, with the schedule switched off, or turned on by hand).\n\n⚠️ CO₂ left on without light can kill fish, and Home Assistant can only switch the plug while it's running. Set a backstop in the plug itself first: an off-only schedule in the plug's app (e.g. eWeLink) shortly after the CO₂ off time, or auto-off. CO₂ is not switched off when Home Assistant restarts.\n\nCO₂ control now: {control_status}",
         "data": {
           "enabled": "Use the CO₂ interlock",
           "entity_id": "CO₂ plug or switch",
           "lead": "CO₂ lead time",
-          "fallback": "Fallback brightness"
+          "fallback": "Fallback brightness",
+          "control": "Switch CO₂ with the light schedule",
+          "on_before": "CO₂ on before the first On step",
+          "off_before": "CO₂ off before the last Off step",
+          "max_hours": "Maximum CO₂ per day",
+          "backstop": "The plug has its own off schedule or auto-off as a backstop"
         },
         "data_description": {
           "lead": "How long CO₂ must be on before the light may go to full brightness.",
-          "fallback": "Share of the step's brightness while CO₂ isn't ready (0 = keep the light off)."
+          "fallback": "Share of the step's brightness while CO₂ isn't ready (0 = keep the light off).",
+          "off_before": "Before the time the light is fully off. Plants use little CO₂ while the light fades.",
+          "backstop": "Required for CO₂ control."
         }
       },
       "modes": {
@@ -261,7 +271,9 @@
       "step_zero": "With a step of 0 the program would never reach your normal schedule.",
       "nothing_to_do": "Start brightness is 100 % and the light period isn't shortened, so there's nothing to do.",
       "fade_before_midnight": "This Off step's fade would have to start before midnight. Use a later time or a shorter fade.",
-      "co2_entity_missing": "Choose the entity that switches your CO₂."
+      "co2_entity_missing": "Choose the entity that switches your CO₂.",
+      "co2_not_switchable": "CO₂ control needs an entity that can be switched (a switch, light or input boolean), not a sensor.",
+      "co2_backstop_required": "Set up an off schedule or auto-off in the plug itself first, then tick this box."
     },
     "abort": {
       "loaded": "{name} is now on the light. Adjust it with the sliders on the device page (the Power sensor shows the total live), then open Configure → Edit a preset → {name} → Save what the light shows now into it.",
