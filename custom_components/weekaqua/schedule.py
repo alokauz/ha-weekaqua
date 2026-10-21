@@ -163,21 +163,26 @@ class WeekAquaScheduler:
         """Fade in minutes as the step actually runs."""
         return float(self.run_window(step)[1]) if step["target"] == OFF_TARGET else float(step.get("fade", 0))
 
-    def step_levels(self, step: dict[str, Any]) -> tuple[int, int, int, int]:
-        """The channel levels the step ends at (brightness, acclimation, power limit)."""
+    def step_levels(self, step: dict[str, Any], include_co2: bool = True) -> tuple[int, int, int, int]:
+        """The channel levels the step ends at (brightness, acclimation, CO₂ fallback, power limit).
+
+        include_co2=False leaves out the CO₂ fallback (for a step later on, CO₂
+        readiness then isn't known yet).
+        """
         if step["target"] == OFF_TARGET or step["target"] not in self.device.presets:
             return (0, 0, 0, 0)
-        scale = step.get("brightness", 100) / 100 * self.acclimation_factor() * self.co2_factor()
+        co2 = self.co2_factor() if include_co2 else 1.0
+        scale = step.get("brightness", 100) / 100 * self.acclimation_factor() * co2
         levels = tuple(round(v * scale) for v in self.device.presets[step["target"]])
         if self.device.power_limit and total_power(levels) > 100.05:
             levels = limit_power(levels)
         return levels
 
-    def describe_levels(self, step: dict[str, Any]) -> str:
+    def describe_levels(self, step: dict[str, Any], include_co2: bool = True) -> str:
         """'R 36% G 70% B 36% UV 0% · power 61%' for an On step."""
         from .device import describe_levels
 
-        levels = self.step_levels(step)
+        levels = self.step_levels(step, include_co2)
         return f"{describe_levels(levels)} · power {total_power(levels):.0f}%"
 
     @callback

@@ -1260,3 +1260,46 @@ async def test_co2_control_form_safety(hass, client):
     await hass.async_block_till_done()
     assert entry.options["co2"]["control"] is True and entry.options["co2"]["max_hours"] == 9
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_step_channels_sensor(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "14:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    freezer.move_to(datetime(2026, 10, 16, 23, 0, 0, tzinfo=tz))           # night
+    hass.states.async_set("switch.co2_plug", "off")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps,
+                 "acclimation": {"start_brightness": 60, "brightness_step": 10, "interval_days": 7, "shorten": 60, "shorten_step": 30},
+                 "co2": {"enabled": True, "entity_id": "switch.co2_plug", "lead": 60, "fallback": 50}})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await entry.runtime_data.acclimation.async_start()
+    await hass.async_block_till_done()
+    ch = "sensor.b3_0_l600pro_71_step_channels"
+
+    # Night: tomorrow's 14:00 step at 60 % (Nature 77 EB 77 00 -> 47 8D 47 00), CO₂ fallback not counted
+    st = hass.states.get(ch)
+    print(st.state, st.attributes)
+    assert st.state == "R 30% G 60% B 30% UV 0%"
+    assert st.attributes["applies"] == "next On step" and st.attributes["step"] == "14:00 · Nature"
+    assert st.attributes["brightness"] == "60% (acclimation 60% of 100%)"
+    assert st.attributes["levels"] == {"R": 71, "G": 141, "B": 71, "UV": 0}
+    assert "co2_note" in st.attributes
+
+    # 14:00 with CO₂ still off: the current step at 60 % x 50 % fallback = 30 %
+    freezer.move_to(datetime(2026, 10, 17, 14, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    st = hass.states.get(ch)
+    assert st.attributes["applies"] == "current step"
+    assert st.attributes["brightness"] == "30% (acclimation 60%, CO₂ fallback 50% of 100%)"
+    assert st.attributes["levels"] == {"R": 36, "G": 70, "B": 36, "UV": 0}
+    assert sent(client)[-1] == "FBF9244624005555"                          # what the light got
+    assert await hass.config_entries.async_unload(entry.entry_id)

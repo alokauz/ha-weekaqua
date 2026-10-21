@@ -14,8 +14,11 @@ from homeassistant.const import PERCENTAGE, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from homeassistant.util import dt as dt_util
+
 from . import WeekAquaConfigEntry
 from .entity import WeekAquaEntity
+
 from .const import total_power
 from .schedule import OFF_TARGET, describe_step
 
@@ -42,6 +45,7 @@ async def async_setup_entry(
             WeekAquaAcclimationSensor(device),
             WeekAquaLastCommand(device),
             WeekAquaCO2Schedule(device),
+            WeekAquaStepChannels(device),
         ]
     )
 
@@ -330,3 +334,80 @@ class WeekAquaCO2Schedule(WeekAquaEntity, SensorEntity):
             "max_hours": self._control.max_hours,
             "co2_entity": self._control.entity_id,
         }
+
+
+class WeekAquaStepChannels(WeekAquaEntity, SensorEntity):
+    """The channel values of the current On step (or the next one), e.g. 'R 31% G 60% B 31% UV 0%'.
+
+    Includes the step's brightness, acclimation, the CO₂ fallback (current step
+    only) and the power limit: exactly what the light gets.
+    """
+
+    _attr_translation_key = "step_channels"
+    _attr_icon = "mdi:palette-swatch-variant"
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "step_channels")
+        self._scheduler = device.scheduler
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._scheduler.add_listener(self.async_write_ha_state))
+        if self._device.acclimation is not None:
+            self.async_on_remove(self._device.acclimation.add_listener(self.async_write_ha_state))
+
+    def _pick(self):
+        """(step, 'now' or 'next', when) for the On step to show."""
+        sched = self._scheduler
+        if not sched.steps:
+            return None
+        step, when = sched.last_step()
+        if step is not None and step["target"] != OFF_TARGET:
+            return step, "now", when
+        # During an Off step (or before the first step): the next On step
+        for nstep, nwhen in sched._occurrences(dt_util.now(), False):
+            if nstep["target"] != OFF_TARGET:
+                return nstep, "next", nwhen
+        return None
+
+    @property
+    def native_value(self) -> str | None:
+        picked = self._pick()
+        if picked is None:
+            return None
+        from .device import describe_levels
+
+        step, which, _ = picked
+        return describe_levels(self._scheduler.step_levels(step, include_co2=which == "now"))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        picked = self._pick()
+        if picked is None:
+            return {}
+        sched = self._scheduler
+        step, which, when = picked
+        levels = sched.step_levels(step, include_co2=which == "now")
+        normal = step.get("brightness", 100)
+        acc = sched.acclimation_factor()
+        co2 = sched.co2_factor() if which == "now" else 1.0
+        reasons = []
+        if acc < 1:
+            reasons.append(f"acclimation {acc * 100:g}%")
+        if co2 < 1:
+            reasons.append(f"CO₂ fallback {self._device.co2.fallback}%")
+        brightness = f"{round(normal * acc * co2, 1):g}%"
+        if reasons:
+            brightness += f" ({', '.join(reasons)} of {normal}%)"
+        attrs = {
+            "applies": "current step" if which == "now" else "next On step",
+            "step": f"{step['time']} · {step['target']}",
+            "starts": dt_util.as_local(when).isoformat(),
+            "brightness": brightness,
+            "power": f"{total_power(levels):.0f}%",
+            "levels": {"R": levels[0], "G": levels[1], "B": levels[2], "UV": levels[3]},
+            "levels_note": "raw values sent to the light, 0-235 (235 = 100 %)",
+        }
+        if which == "next" and sched.co2 is not None and sched.co2.enabled:
+            attrs["co2_note"] = "a CO₂ fallback isn't included for a step that hasn't started"
+        return attrs

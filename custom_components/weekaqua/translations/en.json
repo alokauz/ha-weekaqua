@@ -86,6 +86,9 @@
       },
       "co2_schedule": {
         "name": "CO₂ schedule"
+      },
+      "step_channels": {
+        "name": "Step channels"
       }
     },
     "binary_sensor": {

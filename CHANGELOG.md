@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b10
+
+- New **Step channels** sensor: the actual channel values of the current On step, e.g. `R 30% G 60% B 30% UV 0%`, including acclimation, the CO₂ fallback and the power limit. During an Off step (at night) it shows the next On step. Its details show the step, the brightness with the reason (e.g. `60% (acclimation 60% of 100%)`), the total power and the raw values sent to the light.
+
 ## 0.10.0b9
 
 - With CO₂ control on, the CO₂ switches are part of the schedule sensors: **All steps** shows them in the timeline (e.g. `11:00 · CO₂ on | 14:00 · On · Chat GPT Max 60% | 20:00 · CO₂ off | 21:00 · Off`), and **Next step** shows a CO₂ switch when it comes next (with a CO₂ icon). If a CO₂ switch and a light step happen in the same minute, the light step is shown with the CO₂ switch in its `also` attribute.

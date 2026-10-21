@@ -82,7 +82,7 @@ Under **Configure → Schedule → Add or update a step**, choose a time, a pres
 | 13:00 | White 100 % | 30 min | every day |
 | 21:00 | Off | 60 min | every day |
 
-- Sensors **All steps**, **Current step** and **Next step** show the schedule on the device page, including the actual channel values of On steps (`channels` attribute). The step sensors' icons show what a step does: sunrise (on after off), palette (color change while on) or sunset (off).
+- Sensors **All steps**, **Current step** and **Next step** show the schedule on the device page, including the actual channel values of On steps (`channels` attribute). The **Step channels** sensor shows those values directly: the current On step's channels (or the next one's at night), with acclimation, the CO₂ fallback and the power limit applied. The step sensors' icons show what a step does: sunrise (on after off), palette (color change while on) or sunset (off).
 - With `info` logging (see Troubleshooting), every step logs what it does: preset and channel values, fan, fade duration, curve, smoothness, number of steps and the time between them.
 - The **Schedule** switch pauses it. Turning it back on puts the light where the schedule should be right now (continuing a fade in progress).
 - After a Home Assistant restart the light is also brought back in line with the schedule.
