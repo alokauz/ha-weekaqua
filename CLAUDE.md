@@ -99,6 +99,10 @@ bytes sent. Patching `asyncio.sleep` in `device` patches it globally — only
 freeze long waits. Fake clocks via `loop.time` must not be active while waiting
 for HA's own time triggers.
 
+## Backlog
+
+`BACKLOG.md` lists planned features, items waiting for a decision, and ideas. When an item ships, remove it there and describe it in `CHANGELOG.md`. Items under "Waiting for a decision" need the owner's answer first.
+
 ## Versions and releases
 
 Semantic versioning: MAJOR.MINOR.PATCH (patch = fixes and small adjustments,

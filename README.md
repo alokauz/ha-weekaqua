@@ -185,4 +185,7 @@ The integration ships its own icon (`custom_components/weekaqua/brand/`, Home As
 
 ## Development
 
+Planned features and ideas: `BACKLOG.md`.
+
+
 `CLAUDE.md` describes the protocol, the code layout and the design decisions. Tests: `python -m pip install -r requirements_test.txt`, then `python -m pytest` (Python 3.13; on Windows use WSL). Pushing a new `version` in `manifest.json` to `main` runs the tests and publishes the release automatically.
