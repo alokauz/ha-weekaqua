@@ -229,6 +229,22 @@ class WeekAquaScheduler:
             f"{when} ({days}): from {describe_levels(dev.levels)} {what}, {fade}"
         )
 
+    def describe(self, step: dict[str, Any]) -> str:
+        """describe_step with what acclimation actually does to the step today."""
+        text = describe_step(step, self.device.presets)
+        parts = text.split(" · ")
+        at = self.effective_time(step).strftime("%H:%M")
+        if at != step["time"]:
+            parts[0] = f"{at} (acclimation, normally {step['time']})"
+        factor = self.acclimation_factor()
+        if step["target"] != OFF_TARGET and factor < 1 and len(parts) > 2:
+            normal = step.get("brightness", 100)
+            missing = " (preset missing!)" if parts[2].endswith("(preset missing!)") else ""
+            parts[2] = (
+                f"{step['target']} {normal * factor:g}%{missing} (acclimation, normally {normal}%)"
+            )
+        return " · ".join(parts)
+
     def acclimation_factor(self) -> float:
         return (self.acclimation.brightness() / 100) if self.acclimation else 1.0
 

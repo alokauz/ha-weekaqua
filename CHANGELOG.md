@@ -2,6 +2,11 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b4
+
+- While acclimation runs, **Current step** and **All steps** show what actually happens, like **Next step** already did: the moved Off time and the reduced brightness, with the normal values alongside, e.g. `15:00 · On · Nature 70% (acclimation, normally 100%)`.
+- The schedule form notes when acclimation is running (it lists your normal values).
+
 ## 0.10.0b3
 
 - Preset forms show how far each channel can go up before reaching the power limit, e.g. "R up to 73%, G up to 100%, B up to 67%, UV up to 100%".

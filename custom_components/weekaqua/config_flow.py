@@ -237,6 +237,9 @@ class WeekAquaOptionsFlow(OptionsFlow):
             }
         )
         current = "\n".join(describe_step(s, presets) for s in self._steps()) or "(none yet)"
+        acc = self.config_entry.runtime_data.acclimation
+        if acc is not None and acc.running:
+            current += f"\n(Acclimation is running: {acc.summary()}. These are your normal values; see Configure → Acclimation.)"
         return self.async_show_form(
             step_id="add_schedule",
             data_schema=schema,

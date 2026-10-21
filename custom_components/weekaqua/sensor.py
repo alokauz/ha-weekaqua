@@ -75,11 +75,7 @@ class WeekAquaNextStep(WeekAquaEntity, SensorEntity):
         step, when = self._scheduler.next_step()
         if not self._scheduler.enabled or step is None:
             return {}
-        text = describe_step(step, self._device.presets)
-        at = self._scheduler.effective_time(step).strftime("%H:%M")
-        if at != step["time"]:
-            text = f"{at} (acclimation, normally {step['time']}) · " + text.split(" · ", 1)[1]
-        return {"step": text, "kind": self._scheduler.step_kind(step, when)}
+        return {"step": self._scheduler.describe(step), "kind": self._scheduler.step_kind(step, when)}
 
 
 class WeekAquaCurrentStep(WeekAquaEntity, SensorEntity):
@@ -103,7 +99,7 @@ class WeekAquaCurrentStep(WeekAquaEntity, SensorEntity):
         step, _ = self._scheduler.last_step()
         if step is None:
             return None
-        return describe_step(step, self._device.presets)[:255]
+        return self._scheduler.describe(step)[:255]
 
     @property
     def icon(self) -> str:
@@ -141,17 +137,27 @@ class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
         steps = self._scheduler.steps
         if not steps:
             return "No steps"
+        sched = self._scheduler
+        factor = sched.acclimation_factor()
         parts = []
         for step in steps:
-            target = "Off" if step["target"] == OFF_TARGET else f"On · {step['target']}"
-            parts.append(f"{step['time']} · {target}")
+            at = sched.effective_time(step).strftime("%H:%M")
+            if step["target"] == OFF_TARGET:
+                parts.append(f"{at} · Off")
+            elif factor < 1:
+                parts.append(f"{at} · On · {step['target']} {step.get('brightness', 100) * factor:g}%")
+            else:
+                parts.append(f"{at} · On · {step['target']}")
         summary = " | ".join(parts)
+        acc = self._device.acclimation
+        if acc is not None and acc.running:
+            summary += " (acclimation)"
         return summary if len(summary) <= 255 else summary[:252] + "..."
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {
-            f"step_{i + 1}": describe_step(step, self._device.presets)
+            f"step_{i + 1}": self._scheduler.describe(step)
             for i, step in enumerate(self._scheduler.steps)
         }
 

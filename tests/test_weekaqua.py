@@ -780,6 +780,10 @@ async def test_acclimation(hass, client, freezer):
     assert sched.effective_time(steps[1]).strftime("%H:%M") == "19:30"
     freezer.move_to(datetime(2026, 10, 8, 16, 0, 0, tzinfo=tz)); sched._notify(); await hass.async_block_till_done()
     assert hass.states.get(nxt).attributes["step"] == "19:30 (acclimation, normally 21:00) · Off · every day"
+    # Every step sensor shows what actually happens, not the normal schedule
+    assert hass.states.get("sensor.b3_0_l600pro_71_current_step").state == "15:00 · On · Nature 70% (acclimation, normally 100%) · every day"
+    assert hass.states.get("sensor.b3_0_l600pro_71_all_steps").state == "15:00 · On · Nature 70% | 19:30 · Off (acclimation)"
+    assert hass.states.get("sensor.b3_0_l600pro_71_all_steps").attributes["step_2"] == "19:30 (acclimation, normally 21:00) · Off · every day"
     assert await run_on_step() == "FBF953A453005555"     # 0.7
 
     # Pause for 3 days: level held, dates move by 3 days
@@ -796,6 +800,7 @@ async def test_acclimation(hass, client, freezer):
     assert hass.states.get(switch).state == "off"
     assert sched.effective_time(steps[1]).strftime("%H:%M") == "21:00"
     assert await run_on_step() == "FBF977EB77005555"     # 100 % again
+    assert hass.states.get("sensor.b3_0_l600pro_71_all_steps").state == "15:00 · On · Nature | 21:00 · Off"
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
