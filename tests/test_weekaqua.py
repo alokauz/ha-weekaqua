@@ -191,7 +191,9 @@ async def test_custom_presets(hass, client):
     await call("number", "set_value", {"entity_id": "number.b3_0_l600pro_71_4_uv", "value": 30}, blocking=True)
     await call("number", "set_value", {"entity_id": fan, "value": 40}, blocking=True)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["type"] is FlowResultType.MENU and flow["menu_options"] == ["add_preset", "add_schedule", "acclimation", "co2", "modes", "fade", "power", "display"]
+    assert flow["type"] is FlowResultType.MENU and flow["menu_options"] == ["presets", "schedule", "acclimation", "co2", "modes", "light_settings"]
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "presets"})
+    assert flow["menu_options"] == ["add_preset"]                  # no own presets yet
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_preset"})
     defaults = {str(k): k.default() for k in flow["data_schema"].schema if hasattr(k, "default") and callable(k.default)}
     print(defaults)
@@ -232,7 +234,8 @@ async def test_custom_presets(hass, client):
 
     # Remove it
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["menu_options"] == ["add_preset", "edit_preset", "remove_preset", "add_schedule", "acclimation", "co2", "modes", "fade", "power", "display"]
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "presets"})
+    assert flow["menu_options"] == ["add_preset", "edit_preset", "remove_preset"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "remove_preset"})
     await hass.config_entries.options.async_configure(flow["flow_id"], {"remove": ["My Reef"]})
     await hass.async_block_till_done()
@@ -297,7 +300,9 @@ async def test_schedule(hass, client, freezer):
 async def test_schedule_and_display_forms(hass, client):
     entry = await setup(hass)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["menu_options"] == ["add_preset", "add_schedule", "acclimation", "co2", "modes", "fade", "power", "display"]
+    assert flow["menu_options"] == ["presets", "schedule", "acclimation", "co2", "modes", "light_settings"]
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "schedule"})
+    assert flow["menu_options"] == ["add_schedule"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_schedule"})
     bad = await hass.config_entries.options.async_configure(flow["flow_id"],
         {"time": "09:30:00", "target": "Fresh", "brightness": 60, "fade": 45, "days": []})
@@ -310,7 +315,9 @@ async def test_schedule_and_display_forms(hass, client):
     assert st.attributes["steps"] == ["09:30 · On · Fresh 60% · fade 45 min · Mon–Fri"]
 
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert "remove_schedule" in flow["menu_options"]
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "schedule"})
+    assert flow["menu_options"] == ["add_schedule", "remove_schedule"]
+    assert "09:30 · On · Fresh 60%" in flow["description_placeholders"]["steps"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "remove_schedule"})
     await hass.config_entries.options.async_configure(flow["flow_id"], {"remove": ["09:30"]})
     await hass.async_block_till_done()
@@ -319,6 +326,7 @@ async def test_schedule_and_display_forms(hass, client):
     # Number input style
     assert hass.states.get("number.b3_0_l600pro_71_1_r").attributes["mode"] == "slider"
     flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "light_settings"})
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "display"})
     await hass.config_entries.options.async_configure(flow["flow_id"], {"input_mode": "box"})
     await hass.async_block_till_done()
@@ -426,6 +434,7 @@ async def test_fade_curve_smoothness_and_state_updates(hass, client):
     async def run_fade(seconds, options=None):
         if options:
             flow = await hass.config_entries.options.async_init(entry.entry_id)
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "light_settings"})
             flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "fade"})
             await hass.config_entries.options.async_configure(flow["flow_id"], options)
             await hass.async_block_till_done()
@@ -478,6 +487,7 @@ async def test_schedule_step_fade_overrides(hass, client, freezer):
 
     async def add(values):
         flow = await hass.config_entries.options.async_init(entry.entry_id)
+        flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "schedule"})
         flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_schedule"})
         labels = [o["label"] for o in next(v for k, v in flow["data_schema"].schema.items() if str(k) == "curve").config["options"]]
         await hass.config_entries.options.async_configure(flow["flow_id"], values)
@@ -610,6 +620,7 @@ async def test_power_limit(hass, client):
 
     # Custom preset over 100 % can't be saved
     flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "presets"})
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_preset"})
     res = await hass.config_entries.options.async_configure(flow["flow_id"],
         {"name": "Blinding", "red": 100, "green": 100, "blue": 100, "uv": 100})
@@ -630,7 +641,8 @@ async def test_power_limit(hass, client):
 
     # Turning the limit off (Configure -> Power limit) allows it
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert "power" in flow["menu_options"]
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "light_settings"})
+    assert flow["menu_options"] == ["fade", "power", "display"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "power"})
     await hass.config_entries.options.async_configure(flow["flow_id"], {"power_limit": False})
     await hass.async_block_till_done()
@@ -693,7 +705,8 @@ async def test_edit_preset(hass, client):
     await hass.async_block_till_done()
 
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    assert flow["menu_options"][:3] == ["add_preset", "edit_preset", "remove_preset"]
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "presets"})
+    assert flow["menu_options"] == ["add_preset", "edit_preset", "remove_preset"]
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "edit_preset"})
     labels = [o["label"] for o in next(iter(flow["data_schema"].schema.values())).config["options"]]
     print(labels)
@@ -727,6 +740,7 @@ async def test_edit_preset(hass, client):
 
     # Adding a preset with an existing name is refused (edit is for that)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "presets"})
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_preset"})
     bad = await hass.config_entries.options.async_configure(flow["flow_id"],
         {"name": "Night", "red": 0, "green": 0, "blue": 20, "uv": 10})
@@ -734,6 +748,7 @@ async def test_edit_preset(hass, client):
 
     # Remove list shows values too
     flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "presets"})
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "remove_preset"})
     labels = [o["label"] for o in next(iter(flow["data_schema"].schema.values())).config["options"]]
     assert labels[0].startswith("Afternoon — R 51% G 100% B 51% UV 10%")
@@ -831,6 +846,7 @@ async def test_preset_headroom_and_live_editing(hass, client):
 
     async def open_edit():
         flow = await hass.config_entries.options.async_init(entry.entry_id)
+        flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "presets"})
         return await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "edit_preset"})
 
     # Edit here: headroom for each channel, from the preset's values
@@ -902,6 +918,7 @@ async def test_off_time_is_end_and_acclimation_channels(hass, client, freezer):
 
     # The form refuses an Off fade that would start before midnight
     flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "schedule"})
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_schedule"})
     bad = await hass.config_entries.options.async_configure(flow["flow_id"],
         {"time": "00:30:00", "target": "__off__", "brightness": 100, "fade": 60, "curve": "default", "smoothness": "default", "days": [str(i) for i in every]})

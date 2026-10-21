@@ -102,17 +102,12 @@
       "init": {
         "title": "Week Aqua settings",
         "menu_options": {
-          "add_preset": "Add a preset",
-          "remove_preset": "Remove presets",
-          "add_schedule": "Add or update a schedule step",
-          "remove_schedule": "Remove schedule steps",
-          "display": "Slider or number input",
-          "fade": "Fade smoothness and curve",
-          "power": "Power limit",
-          "edit_preset": "Edit a preset",
+          "presets": "Presets",
+          "schedule": "Schedule",
           "acclimation": "Acclimation (bring the tank up slowly)",
           "co2": "CO₂ (interlock and control)",
-          "modes": "Maintenance and photo modes"
+          "modes": "Maintenance and photo modes",
+          "light_settings": "Light settings (fades, power limit, controls)"
         }
       },
       "add_preset": {
@@ -259,6 +254,31 @@
           "maintenance_minutes": "Maintenance duration",
           "photo_preset": "Photo preset",
           "photo_minutes": "Photo duration"
+        }
+      },
+      "presets": {
+        "title": "Presets",
+        "description": "Your own presets appear at the top of the Preset picker and as light effects.",
+        "menu_options": {
+          "add_preset": "Add a preset",
+          "edit_preset": "Edit a preset",
+          "remove_preset": "Remove presets"
+        }
+      },
+      "schedule": {
+        "title": "Schedule",
+        "description": "Current schedule:\n{steps}",
+        "menu_options": {
+          "add_schedule": "Add or update a step",
+          "remove_schedule": "Remove steps"
+        }
+      },
+      "light_settings": {
+        "title": "Light settings",
+        "menu_options": {
+          "fade": "Fade smoothness and curve",
+          "power": "Power limit",
+          "display": "Slider or number input"
         }
       }
     },

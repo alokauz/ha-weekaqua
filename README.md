@@ -59,11 +59,11 @@ Like the app's *Total power* slider, the integration keeps the light's total pow
 - A single channel slider refuses a change that would exceed 100 %, like the app. Lowering is always allowed.
 - Custom presets above 100 % can't be saved.
 - The **Power** sensor shows the current total power.
-- **Configure → Power limit** can turn it off. Only do this if you know your light can handle it.
+- **Configure → Light settings → Power limit** can turn it off. Only do this if you know your light can handle it.
 
 ## Your own presets
 
-Under **Settings → Devices & services → Week Aqua → Configure**:
+Under **Settings → Devices & services → Week Aqua → Configure → Presets**:
 
 - **Add a preset**: the values start at what the light shows now, so the easiest way is to set the light up on the device page first, then save it with a name. Leave *Fan* empty if the preset shouldn't change the fan.
 - **Edit a preset**: pick a preset (the list shows its channels, fan and total power), then either change its values or name in the form (schedule steps follow a renamed preset; tick **Show on the light now** to see the result), or **load it onto the light**, adjust it live on the device page while the **Power** sensor shows the total, and **save what the light shows** back into the preset.
@@ -74,7 +74,7 @@ Your presets appear at the top of the **Preset** picker (most recently used firs
 
 ## Built-in schedule
 
-Under **Configure → Add or update a schedule step**, choose a time, a preset (or *Off*), a brightness, a fade duration and the days. **On** steps start fading in at their time; **Off** steps are fully off at their time, with the fade starting earlier, so the light period runs from the On time to the Off time. Each step can also use its own fade curve and smoothness instead of the general fade settings. Saving a step at an existing time replaces it. Example photoperiod:
+Under **Configure → Schedule → Add or update a step**, choose a time, a preset (or *Off*), a brightness, a fade duration and the days. **On** steps start fading in at their time; **Off** steps are fully off at their time, with the fade starting earlier, so the light period runs from the On time to the Off time. Each step can also use its own fade curve and smoothness instead of the general fade settings. Saving a step at an existing time replaces it. Example photoperiod:
 
 | Time | Preset | Fade | Days |
 |---|---|---|---|
@@ -104,7 +104,7 @@ For a new tank, new plants or new livestock, **Configure → Acclimation** bring
 
 ## CO₂ interlock
 
-For CO₂-injected tanks, **Configure → CO₂ interlock** keeps the plants from getting full light without CO₂. Choose the entity that switches your CO₂ (e.g. the solenoid's smart plug), a **lead time** and a **fallback brightness**:
+For CO₂-injected tanks, **Configure → CO₂** keeps the plants from getting full light without CO₂. Choose the entity that switches your CO₂ (e.g. the solenoid's smart plug), a **lead time** and a **fallback brightness**:
 
 - If CO₂ hasn't been on for the lead time when an On step runs, or turns off or becomes unavailable while the light is on, the light is held at the fallback brightness (a share of the step's brightness) and you get a notification.
 - When CO₂ has been on for the lead time, the light comes back up by itself over a few minutes.
@@ -154,7 +154,7 @@ automation:
 
 ### How fades work
 
-The light can't fade on command, so the integration sends a series of small level changes. Under **Configure → Fade smoothness and curve**:
+The light can't fade on command, so the integration sends a series of small level changes. Under **Configure → Light settings → Fade smoothness and curve**:
 
 - **Curve** – *Natural* (default) moves evenly in *perceived* brightness (gamma 2.2), so sunrises don't seem to jump up at the start and sunsets don't drop off at the end. *Linear* moves in equal steps of LED power.
 - **Smoothness** – *Fine* sends a command for every level change (never more than ~0.4 % per step, at most twice a second). *Medium*, *Coarse* and *Very coarse* send at most one command every 10, 30 or 60 s.

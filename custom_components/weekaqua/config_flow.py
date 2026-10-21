@@ -166,20 +166,36 @@ class WeekAquaOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Top level: related settings grouped together."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["presets", "schedule", "acclimation", "co2", "modes", "light_settings"],
+        )
+
+    async def async_step_presets(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         menu = ["add_preset"]
         if self._custom():
-            menu.append("edit_preset")
-            menu.append("remove_preset")
-        menu.append("add_schedule")
+            menu += ["edit_preset", "remove_preset"]
+        return self.async_show_menu(step_id="presets", menu_options=menu)
+
+    async def async_step_schedule(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        menu = ["add_schedule"]
         if self._steps():
             menu.append("remove_schedule")
-        menu.append("acclimation")
-        menu.append("co2")
-        menu.append("modes")
-        menu.append("fade")
-        menu.append("power")
-        menu.append("display")
-        return self.async_show_menu(step_id="init", menu_options=menu)
+        presets = self.config_entry.runtime_data.presets
+        current = "\n".join(describe_step(s, presets) for s in self._steps()) or "(no steps yet)"
+        return self.async_show_menu(
+            step_id="schedule", menu_options=menu, description_placeholders={"steps": current}
+        )
+
+    async def async_step_light_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self.async_show_menu(step_id="light_settings", menu_options=["fade", "power", "display"])
 
     async def async_step_add_schedule(
         self, user_input: dict[str, Any] | None = None

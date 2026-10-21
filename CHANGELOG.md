@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0b8
+
+- **Configure** is grouped: **Presets** (add, edit, remove), **Schedule** (add or update a step, remove steps; shows the current schedule), **Acclimation**, **CO₂**, **Maintenance and photo modes**, and **Light settings** (fade smoothness and curve, power limit, slider or number input).
+
 ## 0.10.0b7
 
 - **CO₂ control** (Configure → CO₂, optional): switches the CO₂ plug from the light schedule. On a set time before the day's first On step, off a set time before the last Off step, never longer than a daily maximum. A watchdog switches CO₂ off within a minute whenever it is on outside that window (at night, with the schedule switched off, or turned on by hand) and notifies you. If Home Assistant wasn't running when the window started, CO₂ is switched on when it starts.
