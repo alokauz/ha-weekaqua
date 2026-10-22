@@ -22,6 +22,8 @@ A view of the whole day: R, G, B and UV over 24 h with sunrise and sunset ramps,
 
 ## Ideas
 
+- **Hold back UV during acclimation**: an option for the UV channel to start lower and catch up more slowly than R/G/B (e.g. UV at half the acclimation percentage, reaching normal in the last stage), because UV and strong blue right after a tank reset are said to encourage algae (unverified community advice). Must still end exactly at the normal schedule, like the rest of acclimation, and the Step channels sensor and the plan in Configure must show it.
+
 - **Other Week Aqua models**: model codes 5745 and 5747–5752 use other protocols (already in the decompiled app); needs owners of those lights to test.
 - **Sunrise/sunset-based schedule steps** (e.g. "30 min before sunset") in the built-in schedule.
 - **Translations**, e.g. Russian.
