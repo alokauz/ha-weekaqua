@@ -1,0 +1,79 @@
+# Week Aqua: the day's planned light, per channel, with a "now" line.
+# Needs the "ApexCharts Card" (HACS → search "apexcharts-card" → Download).
+# Add: Dashboard → ⋮ → Edit dashboard → Add card → Manual, paste this.
+# If your entity IDs don't start with "b3_0_l600pro_71", replace it below.
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Light plan today
+  show_states: false
+graph_span: 24h
+span:
+  start: day
+now:
+  show: true
+  label: Now
+apex_config:
+  legend:
+    show: true
+  tooltip:
+    x:
+      format: HH:mm
+yaxis:
+  - min: 0
+    max: 100
+    decimals: 0
+    apex_config:
+      title:
+        text: "%"
+all_series_config:
+  stroke_width: 2
+  curve: straight
+series:
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: Red
+    color: "#FF5C6C"
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.r];
+      });
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: Green
+    color: "#38D98A"
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.g];
+      });
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: Blue
+    color: "#3D8BFF"
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.b];
+      });
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: UV
+    color: "#A35CFF"
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.uv];
+      });
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: Power
+    color: "#9E9E9E"
+    stroke_width: 3
+    stroke_dash: 4
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.power];
+      });

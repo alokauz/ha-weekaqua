@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -11,7 +11,9 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from homeassistant.util import dt as dt_util
@@ -46,6 +48,8 @@ async def async_setup_entry(
             WeekAquaLastCommand(device),
             WeekAquaCO2Schedule(device),
             WeekAquaStepChannels(device),
+            WeekAquaLightPlan(device),
+            WeekAquaLightToday(device),
         ]
     )
 
@@ -425,3 +429,96 @@ class WeekAquaStepChannels(WeekAquaEntity, SensorEntity):
         if which == "next" and sched.co2 is not None and sched.co2.enabled:
             attrs["co2_note"] = "a CO₂ fallback isn't included for a step that hasn't started"
         return attrs
+
+
+class WeekAquaLightPlan(WeekAquaEntity, SensorEntity):
+    """Today's planned light in full-power hours, with the day's curve for charts."""
+
+    _attr_translation_key = "light_plan"
+    _attr_icon = "mdi:chart-bell-curve"
+    _attr_native_unit_of_measurement = "h"
+    _attr_suggested_display_precision = 1
+    # The curve is large and only useful for today: keep it out of the database
+    _unrecorded_attributes = frozenset({"curve"})
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "light_plan")
+        self._scheduler = device.scheduler
+        self._summary: dict[str, Any] = {}
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._scheduler.add_listener(self._refresh))
+        if self._device.acclimation is not None:
+            self.async_on_remove(self._device.acclimation.add_listener(self._refresh))
+        # A new day can have other steps (weekdays) and acclimation stages
+        self.async_on_remove(
+            async_track_time_change(self.hass, self._new_day, hour=0, minute=0, second=30)
+        )
+        self._refresh()
+
+    @callback
+    def _new_day(self, _now) -> None:
+        self._refresh()
+
+    @callback
+    def _refresh(self) -> None:
+        from .lightplan import summary
+
+        self._summary = summary(self._scheduler)
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> float | None:
+        return self._summary.get("planned_full_power_hours")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        s = dict(self._summary)
+        s.pop("planned_full_power_hours", None)
+        s["note"] = "full-power hours: 1 h at 100 % power = 1; relative light, not PAR/DLI. CO₂ fallback not included."
+        return s
+
+
+class WeekAquaLightToday(WeekAquaEntity, SensorEntity, RestoreEntity):
+    """Light actually delivered today, in full-power hours (resets at midnight)."""
+
+    _attr_translation_key = "light_today"
+    _attr_icon = "mdi:white-balance-sunny"
+    _attr_native_unit_of_measurement = "h"
+    _attr_suggested_display_precision = 2
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "light_today")
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_state()) is not None:
+            try:
+                self._device.restore_light(float(last.state), last.attributes.get("date"))
+            except ValueError:
+                pass
+        self.async_on_remove(self._device.add_listener(self.async_write_ha_state))
+        # Keep counting while the light stays the same
+        self.async_on_remove(
+            async_track_time_interval(self.hass, self._tick, timedelta(minutes=5))
+        )
+
+    @callback
+    def _tick(self, _now) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> float:
+        return round(self._device.light_so_far(), 3)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        from .lightplan import planned_until_now
+
+        return {
+            "date": dt_util.now().date().isoformat(),
+            "planned_until_now": round(planned_until_now(self._device.scheduler), 2),
+            "note": "full-power hours: 1 h at 100 % power = 1; relative light, not PAR/DLI",
+        }

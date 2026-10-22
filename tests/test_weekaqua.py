@@ -1394,3 +1394,93 @@ async def test_acclimation_uv_holdback(hass, client, freezer):
     assert acc.summary() == "Finished"
     assert sched.step_levels(steps[0]) == (0xEB, 0x5E, 0x94, 0xEB)
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+def test_no_lambdas_as_timer_callbacks():
+    """A plain lambda passed to HA's event/timer helpers runs in a thread: twice a real bug here."""
+    import pathlib, re
+    root = pathlib.Path(__file__).parent.parent / "custom_components" / "weekaqua"
+    bad = []
+    for path in root.glob("*.py"):
+        text = path.read_text()
+        for m in re.finditer(r"(async_track_\w+|async_at_started|async_call_later)\([^\n]*lambda", text):
+            bad.append(f"{path.name}: {m.group(0)}")
+    assert not bad, bad
+
+
+async def test_light_plan_and_light_today(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "14:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 60, "days": every, "curve": "linear"}]
+    freezer.move_to(datetime(2026, 10, 16, 10, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options={"schedule": steps})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Plan: Nature (87.6 % power) 14:00-20:00, then a linear 1 h sunset to off at 21:00
+    plan = hass.states.get("sensor.b3_0_l600pro_71_light_plan")
+    print(plan.state, {k: v for k, v in plan.attributes.items() if k != "curve"})
+    assert abs(float(plan.state) - (6 * 0.876 + 0.876 / 2)) < 0.03
+    assert plan.attributes["light_from"] == "14:00" and plan.attributes["light_until"] == "21:00"
+    assert plan.attributes["light_hours"] == 7.0 and plan.attributes["peak_power"] == 87.6
+    curve = {p["t"]: p for p in plan.attributes["curve"]}
+    assert curve["13:55"]["power"] == 0 and curve["15:00"]["power"] == 87.6
+    assert curve["15:00"]["g"] == 100.0 and curve["15:00"]["r"] == 50.6
+    assert 40 < curve["20:30"]["power"] < 47                       # halfway through the sunset
+    assert len(plan.attributes["curve"]) == 289
+
+    # Light today: 2 h of Nature = 1.75 full-power hours
+    freezer.move_to(datetime(2026, 10, 16, 14, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    freezer.move_to(datetime(2026, 10, 16, 16, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    today = hass.states.get("sensor.b3_0_l600pro_71_light_today")
+    assert abs(float(today.state) - 2 * 0.876) < 0.01
+    assert abs(today.attributes["planned_until_now"] - 2 * 0.876) < 0.02   # on plan
+
+    # Survives a reload (e.g. saving a preset)
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    freezer.move_to(datetime(2026, 10, 16, 17, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert abs(float(hass.states.get("sensor.b3_0_l600pro_71_light_today").state) - 3 * 0.876) < 0.01
+
+    # New day: starts from 0 again
+    await hass.services.async_call("light", "turn_off", {"entity_id": "light.b3_0_l600pro_71"}, blocking=True)
+    freezer.move_to(datetime(2026, 10, 17, 9, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert float(hass.states.get("sensor.b3_0_l600pro_71_light_today").state) == 0
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_light_plan_with_acclimation(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "14:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    freezer.move_to(datetime(2026, 10, 16, 10, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps, "acclimation": {"start_brightness": 60, "brightness_step": 10, "interval_days": 7, "shorten": 60, "shorten_step": 30}})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    plan = "sensor.b3_0_l600pro_71_light_plan"
+    normal = float(hass.states.get(plan).state)
+    await entry.runtime_data.acclimation.async_start()
+    await hass.async_block_till_done()
+    st = hass.states.get(plan)
+    # 6 h (off 1 h earlier) at 60 %: about 6/7 x 0.6 of the normal amount
+    assert st.attributes["light_until"] == "20:00"
+    assert abs(float(st.state) - normal * 6 / 7 * 0.6) < 0.05
+    assert await hass.config_entries.async_unload(entry.entry_id)

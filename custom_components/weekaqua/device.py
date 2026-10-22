@@ -76,6 +76,10 @@ class WeekAquaDevice:
         self._listeners: list[Callable[[], None]] = []
         self._fade_task: asyncio.Task | None = None
         self.input_mode = "slider"
+        # Light delivered today, in full-power hours (see lightplan.py)
+        self.light_today = 0.0
+        self.light_date = None
+        self._light_since = None
         # Connection diagnostics
         self.last_success = None
         self.last_error: str | None = None
@@ -246,7 +250,40 @@ class WeekAquaDevice:
 
     async def _apply(self, levels: tuple[int, int, int, int]) -> None:
         await self.send(levels_cmd(levels))
+        self._accumulate_light()  # the old levels up to now
         self.levels = levels
+
+    # ---- light delivered today (full-power hours) -----------------------
+
+    @callback
+    def _accumulate_light(self) -> None:
+        now = dt_util.now()
+        if self._light_since is None or self.light_date != now.date():
+            if self._light_since is not None and self.light_date != now.date():
+                # New day: count from midnight with the levels the light had
+                midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                self._light_since = midnight
+                self.light_today = 0.0
+            else:
+                self._light_since = now
+            self.light_date = now.date()
+        hours = (now - self._light_since).total_seconds() / 3600
+        self.light_today += total_power(self.levels) / 100 * max(0.0, hours)
+        self._light_since = now
+
+    def light_so_far(self) -> float:
+        """Full-power hours delivered today (1 h at 100 % power = 1)."""
+        self._accumulate_light()
+        return self.light_today
+
+    @callback
+    def restore_light(self, value: float, day: str | None) -> None:
+        """After a restart: keep counting today's light (not yesterday's)."""
+        now = dt_util.now()
+        if day == now.date().isoformat():
+            self.light_today = float(value)
+            self.light_date = now.date()
+            self._light_since = now
 
     async def _fade(
         self,

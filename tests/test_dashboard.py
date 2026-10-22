@@ -85,6 +85,8 @@ async def test_summary_normal_day(hass, client, freezer):
     assert "**Next at 20:00:** 21:00 · Off · fade 60 min from 20:00 · every day · also 20:00 · CO₂ off" in text
     assert "**Day:** 13:00 · CO₂ on | 14:00 · On · Nature | 20:00 · CO₂ off | 21:00 · Off" in text
     assert "**CO₂:** 13:00–20:00 (7 h)" in text
+    # Natural sunset: the last minutes round to dark, so light ends just before 21:00
+    assert "full-power hours today" in text and "light 14:00–20:5" in text
     assert "Acclimation" not in text
     assert not any(line.startswith("    ") for line in text.splitlines())   # nothing renders as code
     assert text.count("\n\n") >= 3                                       # separate paragraphs
@@ -120,4 +122,16 @@ async def test_links(hass, client, freezer):
     device = dr.async_get(hass).async_get_device(connections={(dr.CONNECTION_BLUETOOTH, ADDR)})
     assert "[Settings (Configure)](/config/integrations/integration/weekaqua)" in text
     assert f"[Device page](/config/devices/device/{device.id})" in text
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_chart_card(hass, client, freezer):
+    entry = await _setup(hass, freezer)
+    chart = yaml.safe_load((CARD.parent / "weekaqua-chart.yaml").read_text())
+    assert chart["type"] == "custom:apexcharts-card"
+    for series in chart["series"]:
+        assert hass.states.get(series["entity"]) is not None
+        key = series["data_generator"].split("p.")[-1].split("]")[0]
+        # each generator reads a key that the curve really has
+        assert key in hass.states.get(series["entity"]).attributes["curve"][0], key
     assert await hass.config_entries.async_unload(entry.entry_id)

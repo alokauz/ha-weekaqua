@@ -91,6 +91,8 @@ cards:
       {%- endif %}
 
       **Day:** {{ states('sensor.' ~ p ~ '_all_steps') }}
+
+      **Light:** {{ states('sensor.' ~ p ~ '_light_today') | float(0) | round(1) }} of {{ states('sensor.' ~ p ~ '_light_plan') | float(0) | round(1) }} full-power hours today (plan so far {{ state_attr('sensor.' ~ p ~ '_light_today', 'planned_until_now') | float(0) | round(1) }}), light {{ state_attr('sensor.' ~ p ~ '_light_plan', 'light_from') }}–{{ state_attr('sensor.' ~ p ~ '_light_plan', 'light_until') }}
       {%- if not is_state('sensor.' ~ p ~ '_co2_schedule', 'unavailable') %}
 
       **CO₂:** {{ states('sensor.' ~ p ~ '_co2_schedule') }}

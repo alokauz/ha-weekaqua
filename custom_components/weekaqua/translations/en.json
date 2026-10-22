@@ -92,6 +92,12 @@
       },
       "step_channels": {
         "name": "Step channels"
+      },
+      "light_plan": {
+        "name": "Light plan"
+      },
+      "light_today": {
+        "name": "Light today"
       }
     },
     "binary_sensor": {
