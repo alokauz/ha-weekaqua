@@ -171,9 +171,8 @@ class WeekAquaScheduler:
         """
         if step["target"] == OFF_TARGET or step["target"] not in self.device.presets:
             return (0, 0, 0, 0)
-        co2 = self.co2_factor() if include_co2 else 1.0
-        scale = step.get("brightness", 100) / 100 * self.acclimation_factor() * co2
-        levels = tuple(round(v * scale) for v in self.device.presets[step["target"]])
+        scales = self.channel_scales(step, include_co2)
+        levels = tuple(round(v * f) for v, f in zip(self.device.presets[step["target"]], scales))
         if self.device.power_limit and total_power(levels) > 100.05:
             levels = limit_power(levels)
         return levels
@@ -275,7 +274,8 @@ class WeekAquaScheduler:
             what = f"to preset {step['target']!r} at {round(normal * acc * co2, 1):g}%"
             notes = []
             if acc < 1:
-                notes.append(f"acclimation {acc * 100:g}%")
+                uv = self.acclimation_uv_factor()
+                notes.append(f"acclimation {acc * 100:g}%" + (f", UV {round(uv * 100):g}%" if uv < acc else ""))
             if co2 < 1:
                 notes.append(f"CO₂ not ready: {self.co2.ready()[1]}, fallback {self.co2.fallback}%")
             if notes:
@@ -324,7 +324,9 @@ class WeekAquaScheduler:
         if step["target"] != OFF_TARGET and (acc < 1 or co2 < 1) and len(parts) > 2:
             normal = step.get("brightness", 100)
             missing = " (preset missing!)" if parts[2].endswith("(preset missing!)") else ""
-            why = [w for w, f in (("acclimation", acc), ("CO₂ not ready", co2)) if f < 1]
+            uv = self.acclimation_uv_factor()
+            acc_text = "acclimation" + (f", UV {round(normal * uv * co2):g}%" if uv < acc else "")
+            why = [w for w, f in ((acc_text, acc), ("CO₂ not ready", co2)) if f < 1]
             parts[2] = (
                 f"{step['target']} {round(normal * acc * co2, 1):g}%{missing} "
                 f"({', '.join(why)}, normally {normal}%)"
@@ -337,6 +339,16 @@ class WeekAquaScheduler:
     def acclimation_factor(self) -> float:
         return (self.acclimation.brightness() / 100) if self.acclimation else 1.0
 
+    def acclimation_uv_factor(self) -> float:
+        return (self.acclimation.uv_brightness() / 100) if self.acclimation else 1.0
+
+    def channel_scales(self, step: dict[str, Any], include_co2: bool = True) -> tuple[float, float, float, float]:
+        """Factor per channel (R, G, B, UV): step brightness x acclimation (UV may be held back) x CO₂."""
+        base = step.get("brightness", 100) / 100 * (self.co2_factor() if include_co2 else 1.0)
+        rgb = base * self.acclimation_factor()
+        uv = base * self.acclimation_uv_factor()
+        return (rgb, rgb, rgb, uv)
+
     async def _apply_step(self, step: dict[str, Any], transition: float) -> None:
         interval = float(step["smoothness"]) if step.get("smoothness") else None
         curve = step.get("curve") or None
@@ -344,7 +356,7 @@ class WeekAquaScheduler:
             await self.device.set_levels((0, 0, 0, 0), transition, interval, curve)
         elif step["target"] in self.device.presets:
             co2 = self.co2_factor()
-            scale = step.get("brightness", 100) / 100 * self.acclimation_factor() * co2
+            scale = self.channel_scales(step)
             self._co2_factor_applied = co2
             if co2 < 1:
                 self._co2_message(

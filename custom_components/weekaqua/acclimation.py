@@ -32,6 +32,9 @@ DEFAULTS: dict[str, Any] = {
     "interval_days": 7,
     "shorten": 120,
     "shorten_step": 30,
+    # UV follows the square of the brightness share (60 % -> UV 36 %), so it starts
+    # lower and catches up, still reaching normal with everything else.
+    "uv_holdback": False,
 }
 STORE_VERSION = 1
 
@@ -152,6 +155,11 @@ class Acclimation:
         """Percent of the schedule's brightness to use now (100 = normal)."""
         return self.values(self.stage())[0] if self.running else 100.0
 
+    def uv_brightness(self, brightness: float | None = None) -> float:
+        """Percent of the schedule's UV to use (equals brightness() without UV hold-back)."""
+        b = self.brightness() if brightness is None else brightness
+        return b * b / 100 if self.settings.get("uv_holdback") else b
+
     def shorter_minutes(self) -> float:
         """How many minutes earlier Off steps run now (0 = normal)."""
         return self.values(self.stage())[1] if self.running else 0.0
@@ -181,6 +189,8 @@ class Acclimation:
             return "Not running"
         brightness, shorter = self.values(self.stage())
         text = f"{brightness:g}%"
+        if self.settings.get("uv_holdback") and brightness < 100:
+            text += f" (UV {round(self.uv_brightness(brightness)):g}%)"
         if shorter:
             text += f" · {describe_minutes(shorter)} shorter"
         return ("Paused · " if self.paused else "") + text
@@ -228,8 +238,12 @@ class Acclimation:
         for stage in range(preview.total_stages() + 1):
             brightness, shorter = preview.values(stage)
             day = start + timedelta(days=stage * int(preview.settings["interval_days"]) + paused)
+            uv = (
+                f" (UV {round(brightness * brightness / 100):g}%)"
+                if preview.settings.get("uv_holdback") and brightness < 100 else ""
+            )
             what = "normal schedule" if stage == preview.total_stages() else (
-                f"{brightness:g}%" + (f" · {describe_minutes(shorter)} shorter" if shorter else "")
+                f"{brightness:g}%{uv}" + (f" · {describe_minutes(shorter)} shorter" if shorter else "")
             )
             mark = " ← now" if self.running and settings is None and stage == self.stage() else ""
             lines.append(f"{day:%d %b}: {what}{mark}")

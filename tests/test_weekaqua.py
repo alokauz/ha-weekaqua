@@ -1353,3 +1353,44 @@ async def test_resend_and_attempt_diagnostics(hass, client):
     assert a["failed_since_start"] == 1 and a["delivered_since_start"] == 4
     client.write_gatt_char.side_effect = None
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_acclimation_uv_holdback(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "14:00", "target": "Colorful", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    freezer.move_to(datetime(2026, 10, 1, 15, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps, "acclimation": {"start_brightness": 60, "brightness_step": 20, "interval_days": 7,
+                                                    "shorten": 0, "shorten_step": 0, "uv_holdback": True}})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    acc, sched = entry.runtime_data.acclimation, entry.runtime_data.scheduler
+    await acc.async_start()
+    await hass.async_block_till_done()
+
+    # Colorful = EB 5E 94 EB. At 60 %: R/G/B x 0.6, UV x 0.36 (0.6 squared)
+    assert acc.summary() == "60% (UV 36%)"
+    assert sched.step_levels(steps[0]) == (141, 56, 89, 85)
+    client.write_gatt_char.reset_mock()
+    await sched._run(sched.steps[0], 0)
+    assert bytes.fromhex(sent(client)[-1])[2:6] == bytes([141, 56, 89, 85])
+    st = hass.states.get("sensor.b3_0_l600pro_71_step_channels")
+    assert st.attributes["brightness"] == "60% (acclimation 60%, UV held back to 36% of 100%)"
+    assert hass.states.get("sensor.b3_0_l600pro_71_current_step").state == "14:00 · On · Colorful 60% (acclimation, UV 36%, normally 100%) · every day"
+
+    # The plan shows UV per stage, and the last stage is the normal schedule (UV 100 % too)
+    lines = acc.plan()
+    assert lines[0].startswith("01 Oct: 60% (UV 36%)") and lines[1].startswith("08 Oct: 80% (UV 64%)")
+    assert lines[-1] == "15 Oct: normal schedule"
+    freezer.move_to(datetime(2026, 10, 15, 15, 0, 0, tzinfo=tz))
+    await acc.async_check()
+    assert acc.summary() == "Finished"
+    assert sched.step_levels(steps[0]) == (0xEB, 0x5E, 0x94, 0xEB)
+    assert await hass.config_entries.async_unload(entry.entry_id)

@@ -406,7 +406,8 @@ class WeekAquaStepChannels(WeekAquaEntity, SensorEntity):
         co2 = sched.co2_factor() if which == "now" else 1.0
         reasons = []
         if acc < 1:
-            reasons.append(f"acclimation {acc * 100:g}%")
+            uv = sched.acclimation_uv_factor()
+            reasons.append(f"acclimation {acc * 100:g}%" + (f", UV held back to {round(uv * 100):g}%" if uv < acc else ""))
         if co2 < 1:
             reasons.append(f"CO₂ fallback {self._device.co2.fallback}%")
         brightness = f"{round(normal * acc * co2, 1):g}%"

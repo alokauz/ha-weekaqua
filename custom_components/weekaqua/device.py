@@ -163,15 +163,19 @@ class WeekAquaDevice:
         self,
         preset_name: str,
         transition: float = 0,
-        scale: float = 1.0,
+        scale: float | tuple[float, float, float, float] = 1.0,
         fade_interval: float | None = None,
         fade_curve: str | None = None,
     ) -> None:
-        """Go to a preset (fading if requested) and set its fan speed, if it has one."""
+        """Go to a preset (fading if requested) and set its fan speed, if it has one.
+
+        scale is one factor for all channels, or one per channel (R, G, B, UV).
+        """
         self.mark_used(preset_name)
         if (fan := self.preset_fans.get(preset_name)) is not None and fan != self.fan:
             await self.set_fan(fan)
-        levels = tuple(round(v * scale) for v in self.presets[preset_name])
+        scales = scale if isinstance(scale, tuple) else (scale,) * 4
+        levels = tuple(round(v * f) for v, f in zip(self.presets[preset_name], scales))
         await self.set_levels(levels, transition, fade_interval, fade_curve)
 
     @property

@@ -215,12 +215,14 @@
           "interval_days": "Step every",
           "shorten": "Light period shorter at the start",
           "shorten_step": "Light period step",
-          "action": "What to do"
+          "action": "What to do",
+          "uv_holdback": "Hold back UV"
         },
         "data_description": {
           "start_brightness": "Of your schedule's brightness (100 % = normal).",
           "shorten": "Off steps run this much earlier at the start (0 = keep the normal light period).",
-          "shorten_step": "How much longer the light period gets at each step."
+          "shorten_step": "How much longer the light period gets at each step.",
+          "uv_holdback": "UV starts lower and catches up: it follows the square of the brightness (60 % → UV 36 %, 80 % → UV 64 %) and reaches normal together with everything else."
         }
       },
       "power_over": {

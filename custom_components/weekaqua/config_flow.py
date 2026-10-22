@@ -305,9 +305,10 @@ class WeekAquaOptionsFlow(OptionsFlow):
         acc = device.acclimation
         errors: dict[str, str] = {}
         if user_input is not None:
-            settings = {k: user_input[k] for k in ACCLIMATION_DEFAULTS}
+            settings = {k: user_input.get(k, ACCLIMATION_DEFAULTS[k]) for k in ACCLIMATION_DEFAULTS}
             for key in ("start_brightness", "brightness_step", "interval_days", "shorten", "shorten_step"):
                 settings[key] = int(settings[key])
+            settings["uv_holdback"] = bool(settings["uv_holdback"])
             action = user_input.get("action", "save")
             if settings["start_brightness"] < 100 and settings["brightness_step"] <= 0:
                 errors["brightness_step"] = "step_zero"
@@ -346,13 +347,14 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 vol.Required("interval_days", default=values["interval_days"]): number(60, "days", 1),
                 vol.Required("shorten", default=values["shorten"]): number(480, "min"),
                 vol.Required("shorten_step", default=values["shorten_step"]): number(240, "min"),
+                vol.Required("uv_holdback", default=bool(values.get("uv_holdback", False))): bool,
                 vol.Required("action", default="save"): SelectSelector(
                     SelectSelectorConfig(options=actions, mode=SelectSelectorMode.LIST)
                 ),
             }
         )
         # Preview of what the shown settings do
-        preview = Acclimation(self.hass, self.config_entry.entry_id, {k: values[k] for k in ACCLIMATION_DEFAULTS})
+        preview = Acclimation(self.hass, self.config_entry.entry_id, {k: values.get(k, ACCLIMATION_DEFAULTS[k]) for k in ACCLIMATION_DEFAULTS})
         stages = preview.total_stages()
         days = stages * int(values["interval_days"])
         plan = (
@@ -379,7 +381,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 "plan": plan,
                 "plan_lines": "\n".join(
                     acc.plan() if acc.running and user_input is None
-                    else acc.plan({k: values[k] for k in ACCLIMATION_DEFAULTS})
+                    else acc.plan({k: values.get(k, ACCLIMATION_DEFAULTS[k]) for k in ACCLIMATION_DEFAULTS})
                 ),
                 "off_note": "" if has_off else "\n\nNote: your schedule has no Off step, so the light period can't be shortened.",
             },
