@@ -24,6 +24,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 
 from .const import limit_power, total_power
+from .texts import day_name, t
 
 from .device import WeekAquaDevice
 
@@ -35,7 +36,7 @@ OFF_TARGET = "__off__"
 RETRY_INTERVAL = 30
 RETRY_FOR = 600
 ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
-SMOOTHNESS_SHORT = {"0.5": "fine", "10": "medium", "30": "coarse", "60": "very coarse"}
+SMOOTHNESS_KEYS = {"0.5": "smooth_fine", "10": "smooth_medium", "30": "smooth_coarse", "60": "smooth_very_coarse"}
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
@@ -49,9 +50,10 @@ def step_key(step: dict[str, Any]) -> str:
 def describe_anchor(step: dict[str, Any]) -> str:
     """'sunset −30 min', 'sunrise +15 min', 'sunset'."""
     offset = int(step.get("offset", 0))
+    anchor = t(step["anchor"])
     if not offset:
-        return step["anchor"]
-    return f"{step['anchor']} {'+' if offset > 0 else '−'}{abs(offset)} min"
+        return anchor
+    return t("anchor_offset", anchor=anchor, sign="+" if offset > 0 else "−", minutes=abs(offset))
 
 
 def resolve_sun_time(hass: HomeAssistant, step: dict[str, Any], day) -> str | None:
@@ -79,36 +81,32 @@ def describe_step(step: dict[str, Any], presets: dict | None = None) -> str:
     """Human-readable summary, e.g. '08:00 · On · Nature 80% · fade 45 min · Mon–Fri'."""
     anchor = f" ({describe_anchor(step)})" if step.get("anchor") else ""
     if step["target"] == OFF_TARGET:
-        what = "Off"
+        what = t("off")
     else:
-        what = f"On · {step['target']} {step.get('brightness', 100)}%"
+        what = f"{t('on')} · {step['target']} {step.get('brightness', 100)}%"
         if presets is not None and step["target"] not in presets:
-            what += " (preset missing!)"
+            what += f" {t('preset_missing')}"
     fade = ""
     if step.get("fade"):
-        extras = [
-            label
-            for label in (
-                {"perceptual": "natural", "linear": "linear"}.get(step.get("curve") or ""),
-                SMOOTHNESS_SHORT.get(str(step.get("smoothness") or "")),
-            )
-            if label
-        ]
-        fade = f" · fade {step['fade']:g} min" + (f" ({', '.join(extras)})" if extras else "")
+        curve_key = {"perceptual": "curve_perceptual", "linear": "curve_linear"}.get(step.get("curve") or "")
+        smooth_key = SMOOTHNESS_KEYS.get(str(step.get("smoothness") or ""))
+        extras = [t(key) for key in (curve_key, smooth_key) if key]
+        minutes = f"{step['fade']:g}"
+        fade = f" · {t('fade', minutes=minutes)}" + (f" ({', '.join(extras)})" if extras else "")
         if step["target"] == OFF_TARGET:
             # Off steps are fully off at their time; the fade starts earlier
-            t = step_time(step)
-            start = max(0, t.hour * 60 + t.minute - int(round(step["fade"])))
-            fade += f" from {start // 60:02d}:{start % 60:02d}"
+            at = step_time(step)
+            start = max(0, at.hour * 60 + at.minute - int(round(step["fade"])))
+            fade += f" {t('fade_from', time=f'{start // 60:02d}:{start % 60:02d}')}"
     days = sorted(step.get("days", ALL_DAYS))
     if days == ALL_DAYS:
-        day_text = "every day"
+        day_text = t("every_day")
     elif days == [0, 1, 2, 3, 4]:
-        day_text = "Mon–Fri"
+        day_text = t("mon_fri")
     elif days == [5, 6]:
-        day_text = "Sat–Sun"
+        day_text = t("sat_sun")
     else:
-        day_text = ", ".join(DAY_NAMES[d] for d in days)
+        day_text = ", ".join(day_name(d) for d in days)
     return f"{step.get('time', '--:--')}{anchor} · {what}{fade} · {day_text}"
 
 
@@ -232,7 +230,7 @@ class WeekAquaScheduler:
         from .device import describe_levels
 
         levels = self.step_levels(step, include_co2)
-        return f"{describe_levels(levels)} · power {total_power(levels):.0f}%"
+        return f"{describe_levels(levels)} · {t('power')} {total_power(levels):.0f}%"
 
     @callback
     def reschedule(self) -> None:
@@ -379,17 +377,21 @@ class WeekAquaScheduler:
             actual["fade"] = self.run_fade(step)
         parts = describe_step(actual, self.device.presets).split(" · ")
         if at != step["time"]:
-            parts[0] = f"{at} (acclimation, normally {step['time']})"
+            parts[0] = t("acclimated_time", time=at, normal=step["time"])
         acc, co2 = self.acclimation_factor(), self.co2_factor()
         if step["target"] != OFF_TARGET and (acc < 1 or co2 < 1) and len(parts) > 2:
             normal = step.get("brightness", 100)
-            missing = " (preset missing!)" if parts[2].endswith("(preset missing!)") else ""
+            missing = f" {t('preset_missing')}" if parts[2].endswith(t("preset_missing")) else ""
             uv = self.acclimation_uv_factor()
-            acc_text = "acclimation" + (f", UV {round(normal * uv * co2):g}%" if uv < acc else "")
-            why = [w for w, f in ((acc_text, acc), ("CO₂ not ready", co2)) if f < 1]
-            parts[2] = (
-                f"{step['target']} {round(normal * acc * co2, 1):g}%{missing} "
-                f"({', '.join(why)}, normally {normal}%)"
+            acc_text = t("acclimated_uv", uv=f"{round(normal * uv * co2):g}") if uv < acc else t("acclimation")
+            why = [w for w, f in ((acc_text, acc), (t("co2_not_ready_short"), co2)) if f < 1]
+            parts[2] = t(
+                "brightness_why",
+                target=step["target"],
+                brightness=f"{round(normal * acc * co2, 1):g}",
+                missing=missing,
+                why=", ".join(why),
+                normal=normal,
             )
         return " · ".join(parts)
 
@@ -420,9 +422,8 @@ class WeekAquaScheduler:
             self._co2_factor_applied = co2
             if co2 < 1:
                 self._co2_message(
-                    f"CO₂ isn't ready ({self.co2.ready()[1]}), so the {step['time']} step runs at "
-                    f"{self.co2.fallback}% of its brightness until CO₂ has been on for "
-                    f"{self.co2.lead} minutes."
+                    t("co2_fallback_msg", reason=self.co2.ready()[1], time=step["time"],
+                      fallback=self.co2.fallback, lead=self.co2.lead)
                 )
             await self.device.apply_preset(step["target"], transition, scale, interval, curve)
         else:
@@ -531,7 +532,7 @@ class WeekAquaScheduler:
             _LOGGER.info("CO₂ no longer ready (%s): lowering the light", self.co2.ready()[1])
         else:
             _LOGGER.info("CO₂ ready again: back to normal brightness")
-            self._co2_message(f"CO₂ is ready again ({self.co2.ready()[1]}). The light is back to normal brightness.")
+            self._co2_message(t("co2_ready_msg", reason=self.co2.ready()[1]))
         # Gently, over 5 minutes (or the rest of a running fade)
         self.hass.async_create_task(self.apply_current(min_transition=300))
 
@@ -539,7 +540,7 @@ class WeekAquaScheduler:
         from homeassistant.components import persistent_notification
 
         persistent_notification.async_create(
-            self.hass, message, title="Week Aqua: CO₂ interlock",
+            self.hass, message, title=t("co2_title"),
             notification_id=f"weekaqua_co2_{self.device.address}",
         )
 

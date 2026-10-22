@@ -60,9 +60,13 @@ from .device import describe_levels
 from .co2 import DEFAULTS as CO2_DEFAULTS
 from .co2_control import CONTROLLABLE_DOMAINS as CO2_CONTROLLABLE, DEFAULTS as CO2_CONTROL_DEFAULTS
 from .acclimation import DEFAULTS as ACCLIMATION_DEFAULTS, Acclimation, describe_minutes
-from .schedule import ALL_DAYS, DAY_NAMES, OFF_TARGET, describe_step, resolve_sun_time, step_key, step_time
+from .texts import day_name, format_date, t
+from .schedule import ALL_DAYS, OFF_TARGET, describe_step, resolve_sun_time, step_key, step_time
 
 CONF_FAN = "fan"
+# Smoothness is stored as seconds ("0.5", "10", ...); list options need names
+SMOOTH_NAME = {"0.5": "fine", "10": "medium", "30": "coarse", "60": "very_coarse"}
+SMOOTH_SECONDS = {v: k for k, v in SMOOTH_NAME.items()}
 CONF_APPLY = "apply"
 CONF_REMOVE = "remove"
 PERCENT_SLIDER = NumberSelector(
@@ -194,7 +198,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
         if self._steps():
             menu.append("remove_schedule")
         presets = self.config_entry.runtime_data.presets
-        current = "\n".join(describe_step(self._resolved(s), presets) for s in self._steps()) or "(no steps yet)"
+        current = "\n".join(describe_step(self._resolved(s), presets) for s in self._steps()) or t("no_steps_yet")
         return self.async_show_menu(
             step_id="schedule", menu_options=menu, description_placeholders={"steps": current}
         )
@@ -231,7 +235,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 if user_input.get("curve", "default") != "default":
                     step["curve"] = user_input["curve"]
                 if user_input.get("smoothness", "default") != "default":
-                    step["smoothness"] = user_input["smoothness"]
+                    step["smoothness"] = SMOOTH_SECONDS.get(user_input["smoothness"], user_input["smoothness"])
                 # One step per time: saving the same time again replaces it.
                 # One step per time (or per sun anchor + offset): saving it again replaces it
                 steps = [s for s in self._steps() if step_key(s) != step_key(step)] + [step]
@@ -239,25 +243,32 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 return self._save(**{CONF_SCHEDULE: steps})
 
         presets = self.config_entry.runtime_data.ordered_presets()
-        targets = [SelectOptionDict(value=OFF_TARGET, label="Off")] + [
+        targets = [SelectOptionDict(value=OFF_TARGET, label=t("off"))] + [
             SelectOptionDict(value=name, label=name) for name in presets
         ]
-        days = [SelectOptionDict(value=str(i), label=DAY_NAMES[i]) for i in ALL_DAYS]
+        days = [SelectOptionDict(value=str(i), label=day_name(i)) for i in ALL_DAYS]
         general_curve = self.config_entry.options.get(CONF_FADE_CURVE, "perceptual")
         general_smooth = self.config_entry.options.get(CONF_FADE_INTERVAL, DEFAULT_FADE_INTERVAL)
         curve_options = [
-            SelectOptionDict(value="default", label=f"Use general setting ({CURVE_LABELS[general_curve]})"),
+            SelectOptionDict(value="default", label="Use general setting"),
             *(SelectOptionDict(value=k, label=v) for k, v in CURVE_LABELS.items()),
         ]
         smoothness_options = [
-            SelectOptionDict(value="default", label=f"Use general setting ({FADE_SMOOTHNESS[general_smooth]})"),
-            *(SelectOptionDict(value=k, label=v) for k, v in FADE_SMOOTHNESS.items()),
+            SelectOptionDict(value="default", label="Use general setting"),
+            *(SelectOptionDict(value=SMOOTH_NAME[k], label=v) for k, v in FADE_SMOOTHNESS.items()),
         ]
+        smooth_key = {"0.5": "smooth_fine", "10": "smooth_medium", "30": "smooth_coarse", "60": "smooth_very_coarse"}
+        general = t(
+            "general_setting",
+            curve=t("curve_perceptual" if general_curve == "perceptual" else "curve_linear"),
+            smoothness=t(smooth_key.get(general_smooth, "smooth_medium")),
+        )
         defaults = user_input or {}
         schema = vol.Schema(
             {
                 vol.Required("when", default=defaults.get("when", "time")): SelectSelector(
                     SelectSelectorConfig(
+                        translation_key="step_when",
                         options=[
                             SelectOptionDict(value="time", label="At a fixed time"),
                             SelectOptionDict(value="sunrise", label="Relative to sunrise"),
@@ -280,17 +291,17 @@ class WeekAquaOptionsFlow(OptionsFlow):
                     NumberSelectorConfig(min=0, max=480, step=1, unit_of_measurement="min", mode=NumberSelectorMode.BOX)
                 ),
                 vol.Required("curve", default=defaults.get("curve", "default")): SelectSelector(
-                    SelectSelectorConfig(options=curve_options, mode=SelectSelectorMode.DROPDOWN)
+                    SelectSelectorConfig(options=curve_options, mode=SelectSelectorMode.DROPDOWN, translation_key="step_curve")
                 ),
                 vol.Required("smoothness", default=defaults.get("smoothness", "default")): SelectSelector(
-                    SelectSelectorConfig(options=smoothness_options, mode=SelectSelectorMode.DROPDOWN)
+                    SelectSelectorConfig(options=smoothness_options, mode=SelectSelectorMode.DROPDOWN, translation_key="step_smoothness")
                 ),
                 vol.Required("days", default=defaults.get("days", [str(i) for i in ALL_DAYS])): SelectSelector(
-                    SelectSelectorConfig(options=days, multiple=True, mode=SelectSelectorMode.LIST)
+                    SelectSelectorConfig(options=days, multiple=True, mode=SelectSelectorMode.LIST, translation_key="step_days")
                 ),
             }
         )
-        current = "\n".join(describe_step(self._resolved(s), presets) for s in self._steps()) or "(none yet)"
+        current = "\n".join(describe_step(self._resolved(s), presets) for s in self._steps()) or t("none_yet")
         acc = self.config_entry.runtime_data.acclimation
         if acc is not None and acc.running:
             current += f"\n(Acclimation is running: {acc.summary()}. These are your normal values; see Configure → Acclimation.)"
@@ -298,7 +309,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
             step_id="add_schedule",
             data_schema=schema,
             errors=errors,
-            description_placeholders={"steps": current},
+            description_placeholders={"steps": current, "general": general},
         )
 
     async def async_step_remove_schedule(
@@ -361,7 +372,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 NumberSelectorConfig(min=minimum, max=maximum, step=1, unit_of_measurement=unit, mode=NumberSelectorMode.BOX)
             )
         actions = [SelectOptionDict(value="save", label="Save settings only")]
-        actions.append(SelectOptionDict(value="start", label="Restart from the beginning now" if acc.running else "Start now"))
+        actions.append(SelectOptionDict(value="start", label="Start (or restart) from the beginning now"))
         if acc.running and acc.stage() > 0:
             actions.append(SelectOptionDict(value="back", label="Go back one step (e.g. algae appeared), and stay there a full interval"))
         if acc.running:
@@ -375,7 +386,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 vol.Required("shorten_step", default=values["shorten_step"]): number(240, "min"),
                 vol.Required("uv_holdback", default=bool(values.get("uv_holdback", False))): bool,
                 vol.Required("action", default="save"): SelectSelector(
-                    SelectSelectorConfig(options=actions, mode=SelectSelectorMode.LIST)
+                    SelectSelectorConfig(options=actions, mode=SelectSelectorMode.LIST, translation_key="acclimation_action")
                 ),
             }
         )
@@ -383,20 +394,25 @@ class WeekAquaOptionsFlow(OptionsFlow):
         preview = Acclimation(self.hass, self.config_entry.entry_id, {k: values.get(k, ACCLIMATION_DEFAULTS[k]) for k in ACCLIMATION_DEFAULTS})
         stages = preview.total_stages()
         days = stages * int(values["interval_days"])
-        plan = (
-            f"{values['start_brightness']:g}% → 100% brightness"
-            + (f", light period {describe_minutes(values['shorten'])} shorter → normal" if values["shorten"] else "")
-            + f": {stages} steps, back to normal after {days} days."
-            if stages else "These settings change nothing."
-        )
+        plan = t(
+            "plan_summary",
+            start=f"{values['start_brightness']:g}",
+            period=t("plan_period", minutes=describe_minutes(values["shorten"])) if values["shorten"] else "",
+            steps=stages,
+            days=days,
+        ) if stages else t("plan_nothing")
         status = acc.summary()
         if acc.running and acc.ends():
-            status += f" (back to normal on {acc.ends():%d %b %Y})"
+            status += t("back_to_normal_on", date=format_date(acc.ends(), year=True))
         if acc.running:
             sched = device.scheduler
-            for s in sched.steps:
-                if s["target"] != "__off__":
-                    status += f"\n• {s['time']} {s['target']} at {s.get('brightness', 100) * acc.brightness() / 100:g}%: {sched.describe_levels(s)}"
+            for step in sched.steps:
+                if step["target"] != "__off__":
+                    status += t(
+                        "acc_step_line", time=step["time"], target=step["target"],
+                        percent=f"{step.get('brightness', 100) * acc.brightness() / 100:g}",
+                        levels=sched.describe_levels(step),
+                    )
         has_off = any(s["target"] == "__off__" for s in self._steps())
         return self.async_show_form(
             step_id="acclimation",
@@ -409,7 +425,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
                     acc.plan() if acc.running and user_input is None
                     else acc.plan({k: values.get(k, ACCLIMATION_DEFAULTS[k]) for k in ACCLIMATION_DEFAULTS})
                 ),
-                "off_note": "" if has_off else "\n\nNote: your schedule has no Off step, so the light period can't be shortened.",
+                "off_note": "" if has_off else t("off_note"),
             },
         )
 
@@ -443,7 +459,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
             vol.Optional("entity_id", description={"suggested_value": current["entity_id"]})
             if current.get("entity_id") else vol.Optional("entity_id")
         )
-        status = self.config_entry.runtime_data.co2.ready()[1] if current.get("enabled") else "off"
+        status = self.config_entry.runtime_data.co2.ready()[1] if current.get("enabled") else t("co2_status_off")
         return self.async_show_form(
             step_id="co2",
             data_schema=vol.Schema({
@@ -491,6 +507,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
+            user_input = {**user_input, CONF_FADE_INTERVAL: SMOOTH_SECONDS.get(user_input[CONF_FADE_INTERVAL], user_input[CONF_FADE_INTERVAL])}
             return self._save(**user_input)
         options = self.config_entry.options
         return self.async_show_form(
@@ -498,14 +515,16 @@ class WeekAquaOptionsFlow(OptionsFlow):
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_FADE_INTERVAL, default=options.get(CONF_FADE_INTERVAL, DEFAULT_FADE_INTERVAL)
+                        CONF_FADE_INTERVAL,
+                        default=SMOOTH_NAME.get(options.get(CONF_FADE_INTERVAL, DEFAULT_FADE_INTERVAL), "medium"),
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=[
-                                SelectOptionDict(value=value, label=label)
+                                SelectOptionDict(value=SMOOTH_NAME[value], label=label)
                                 for value, label in FADE_SMOOTHNESS.items()
                             ],
                             mode=SelectSelectorMode.LIST,
+                            translation_key="fade_smoothness",
                         )
                     ),
                     vol.Required(
@@ -516,6 +535,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
                                 SelectOptionDict(value=k, label=v) for k, v in CURVE_LABELS.items()
                             ],
                             mode=SelectSelectorMode.LIST,
+                            translation_key="fade_curve",
                         )
                     ),
                 }
@@ -558,6 +578,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
                                 SelectOptionDict(value="box", label="Type a number"),
                             ],
                             mode=SelectSelectorMode.LIST,
+                            translation_key="input_mode",
                         )
                     )
                 }
@@ -574,20 +595,20 @@ class WeekAquaOptionsFlow(OptionsFlow):
             for label, v in zip(("R", "G", "B", "UV"), levels)
         )
         if preset.get("fan") is not None:
-            text += f" · fan {preset['fan']:g}%"
-        return f"{text} · power {total_power(levels):.0f}%"
+            text += f" · {t('fan')} {preset['fan']:g}%"
+        return f"{text} · {t('power')} {total_power(levels):.0f}%"
 
     def _headroom(self, values: dict[str, Any]) -> str:
         """How far each channel can go up, with the others as they are."""
         if not self.config_entry.options.get(CONF_POWER_LIMIT, True):
-            return "Power limit is off."
+            return t("headroom_off")
         fractions = [values.get(key, 0) / 100 for key in CHANNELS]
         parts = []
         for i, (label, weight) in enumerate(zip(("R", "G", "B", "UV"), POWER_WEIGHTS)):
             others = sum(w * f for j, (w, f) in enumerate(zip(POWER_WEIGHTS, fractions)) if j != i)
             limit = max(0.0, min(1.0, (1 - others) / weight))
-            parts.append(f"{label} up to {int(limit * 100)}%")
-        return "With the other channels as shown, " + ", ".join(parts) + "."
+            parts.append(t("headroom_part", channel=label, percent=int(limit * 100)))
+        return t("headroom", parts=", ".join(parts))
 
     def _preset_schema(
         self, values: dict[str, Any], name: str, with_apply: bool
@@ -698,10 +719,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
         hows = [
             SelectOptionDict(value="form", label="Edit the values here"),
             SelectOptionDict(value="load", label="Load it onto the light, to adjust it live on the device page"),
-            SelectOptionDict(
-                value="save_light",
-                label=f"Save what the light shows now into it ({describe_levels(device.levels)}, power {total_power(device.levels):.0f}%)",
-            ),
+            SelectOptionDict(value="save_light", label="Save what the light shows now into it"),
         ]
         return self.async_show_form(
             step_id="edit_preset",
@@ -711,10 +729,13 @@ class WeekAquaOptionsFlow(OptionsFlow):
                         SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)
                     ),
                     vol.Required("how", default="form"): SelectSelector(
-                        SelectSelectorConfig(options=hows, mode=SelectSelectorMode.LIST)
+                        SelectSelectorConfig(options=hows, mode=SelectSelectorMode.LIST, translation_key="edit_how")
                     ),
                 }
             ),
+            description_placeholders={
+                "light_now": t("light_now", levels=describe_levels(device.levels), power=f"{total_power(device.levels):.0f}"),
+            },
         )
 
     async def async_step_edit_preset_values(
@@ -745,7 +766,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
             description_placeholders={
                 "name": old_name,
                 "current": self._describe_preset(preset),
-                "used_by": ", ".join(used_by) if used_by else "no schedule steps",
+                "used_by": ", ".join(used_by) if used_by else t("no_schedule_steps"),
                 "headroom": self._headroom(values),
             },
         )

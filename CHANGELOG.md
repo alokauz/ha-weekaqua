@@ -2,6 +2,12 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0b2
+
+- **Russian is complete**: besides menus and forms, all list choices (when, curve, smoothness, days, acclimation actions, …) and everything the integration writes itself — sensor values (e.g. `14:00 · Вкл · Nature 60%`), acclimation plans and dates, CO₂ reasons, notifications and error messages — follow Home Assistant's language (Settings → System → General → Language). Log lines stay English for bug reports.
+- Russian dashboard cards: `dashboard/weekaqua-card.ru.yaml` and `dashboard/weekaqua-chart.ru.yaml`.
+- The schedule form shows the general fade setting in its description (the list option is now simply "Use general setting"); *Edit a preset* shows the light's current values in its description.
+
 ## 0.11.0b1
 
 - **Light plan** sensor: today's planned light in *full-power hours* (1 h at 100 % power = 1; a relative measure, not PAR/DLI), the light period and peak power, and the whole day's R/G/B/UV/power curve for charts. Follows the schedule as it runs today, incl. fades, acclimation and the power limit.

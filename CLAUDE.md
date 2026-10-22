@@ -55,7 +55,8 @@ Installed by users through HACS from this repository. Owner: Flint.
 | `sensor.py` | Power, Next step, Current step, All steps |
 | `config_flow.py` | Bluetooth discovery + the **Configure** menu (options flow) |
 | `strings.json` + `translations/en.json` | UI texts — **keep both identical** |
-| `translations/ru.json` | Russian: same keys and `{placeholders}` as English (a test enforces it). Add every new text here too. Where a text names a list option that is still English in the UI, quote the English label |
+| `texts.py` | Texts the integration writes itself (sensor values, plans, notifications, errors) in every language, chosen from `hass.config.language` at setup; use `t("key", ...)`, `day_name()`, `format_date()`. Tests check all languages have the same keys and placeholders. Log messages stay English |
+| `translations/ru.json` | Russian: same keys and `{placeholders}` as English (a test enforces it). Add every new text here too. List choices use `translation_key` with a `selector` section (option keys: lowercase letters, digits, `_`/`-`, not starting or ending with `_`; smoothness is offered as fine/medium/coarse/very_coarse and stored as seconds). List options can't contain changing values: put those in description placeholders. Russian dashboard cards: `dashboard/*.ru.yaml` — keep them in sync with the English ones |
 | `brand/icon.png`, `brand/icon@2x.png` | Integration icon (256 / 512 px), rendered from `assets/icon.svg` |
 
 ## Design decisions to keep

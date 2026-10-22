@@ -21,6 +21,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 
+from .texts import t
 from .const import (
     DISCONNECT_DELAY,
     DOMAIN,
@@ -219,10 +220,7 @@ class WeekAquaDevice:
         exempt = power <= total_power(self.levels)
         if self.power_limit and power > 100.05 and not exempt:
             if strict:
-                raise HomeAssistantError(
-                    f"Total power would be {power:.0f}%, the maximum is 100%. "
-                    "Lower another channel first."
-                )
+                raise HomeAssistantError(t("err_power", power=f"{power:.0f}"))
             limited = limit_power(target)
             _LOGGER.info(
                 "Power limit: %s would draw %.0f%%, scaled down to %s (%.0f%%)",
@@ -381,7 +379,7 @@ class WeekAquaDevice:
                     except (BleakError, TimeoutError) as err2:
                         await self._disconnect()
                         raise HomeAssistantError(
-                            f"Could not send command to {self.name}: {err2}"
+                            t("err_send", name=self.name, error=err2)
                         ) from err2
             except HomeAssistantError as err:
                 self._record_failure(str(err))
@@ -473,9 +471,7 @@ class WeekAquaDevice:
             self.hass, self.address, connectable=True
         )
         if ble_device is None:
-            raise HomeAssistantError(
-                f"{self.name} ({self.address}) is not in Bluetooth range"
-            )
+            raise HomeAssistantError(t("err_not_in_range", name=self.name, address=self.address))
         client = await establish_connection(
             BleakClientWithServiceCache,
             ble_device,
@@ -495,7 +491,7 @@ class WeekAquaDevice:
                 break
         if char is None:
             await client.disconnect()
-            raise HomeAssistantError(f"{self.name}: write characteristic not found")
+            raise HomeAssistantError(t("err_no_characteristic", name=self.name))
         self._client = client
         self._char = char
         _LOGGER.debug("Connected to %s, using %s", self.name, char.uuid)
@@ -571,11 +567,11 @@ def describe_command(payload: bytes) -> str:
     if payload[:2] == b"\xfb\xf9":
         return describe_levels(payload[2:6])
     if payload[:1] == b"\xfc":
-        return f"fan {round(payload[1] / MAX_LEVEL * 100)}%"
+        return t("cmd_fan", percent=round(payload[1] / MAX_LEVEL * 100))
     if payload[:1] == b"\xff":
-        return f"clock {payload[1]:02x}:{payload[2]:02x}:{payload[3]:02x}"
+        return t("cmd_clock", time=f"{payload[1]:02x}:{payload[2]:02x}:{payload[3]:02x}")
     if payload[:2] == b"\xfd\xf1":
-        return "light's own simple schedule"
+        return t("cmd_simple")
     if payload[:2] == b"\xfd\xf2":
-        return "light's own advanced schedule"
+        return t("cmd_advanced")
     return payload.hex().upper()

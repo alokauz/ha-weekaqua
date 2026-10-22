@@ -135,3 +135,31 @@ async def test_chart_card(hass, client, freezer):
         # each generator reads a key that the curve really has
         assert key in hass.states.get(series["entity"]).attributes["curve"][0], key
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_russian_card(hass, client, freezer):
+    from custom_components.weekaqua.texts import set_language
+    hass.config.language = "ru"
+    try:
+        entry = await _setup(hass, freezer)
+        card = yaml.safe_load((CARD.parent / "weekaqua-card.ru.yaml").read_text())
+        missing = [e for e in _entities(card) if hass.states.get(e) is None]
+        assert not missing, missing
+        await hass.services.async_call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "Nature"}, blocking=True)
+        await entry.runtime_data.acclimation.async_start()
+        await hass.async_block_till_done()
+        text = Template(_markdown(card), hass).async_render(parse_result=False)
+        print(text)
+        assert "**Сейчас:** 14:00 · Вкл · Nature" in text
+        assert "**Каналы** (текущий шаг):" in text and "· мощность" in text
+        assert "**День:**" in text and "CO₂ вкл" in text and "**Свет:**" in text
+        assert "**Акклиматизация:** 60% · короче на 2 ч · следующий шаг 23.10 · обычное с 13.11" in text
+        for english in ("**Now:**", "**Next", "**Day:**", "full-power", "next step"):
+            assert english not in text, english
+        links = Template([c["content"] for c in card["cards"] if c["type"] == "markdown"][-1], hass).async_render(parse_result=False)
+        assert "[Настройки (Настроить)](/config/integrations/integration/weekaqua)" in links
+        chart = yaml.safe_load((CARD.parent / "weekaqua-chart.ru.yaml").read_text())
+        assert all(hass.states.get(s["entity"]) for s in chart["series"])
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    finally:
+        set_language("en")

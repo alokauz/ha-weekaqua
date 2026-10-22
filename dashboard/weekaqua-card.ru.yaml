@@ -1,0 +1,144 @@
+# Карточка Week Aqua для панели (русская версия)
+# Панель → ⋮ → Изменить панель → Добавить карточку → Вручную, вставьте всё ниже.
+# ID объектов начинаются с имени светильника; если у вас не
+# "b3_0_l600pro_71", замените этот текст везде (и в строке шаблона
+# "{% set p = ... %}").
+type: vertical-stack
+cards:
+  - type: tile
+    entity: light.b3_0_l600pro_71
+    name: Аквариум
+    icon: mdi:fishbowl-outline
+    state_content:
+      - state
+      - brightness
+      - effect
+    features:
+      - type: light-brightness
+
+  - type: tile
+    entity: select.b3_0_l600pro_71_preset
+    name: Пресет
+    features:
+      - type: select-options
+
+  - type: grid
+    columns: 5
+    square: false
+    cards:
+      - type: tile
+        entity: switch.b3_0_l600pro_71_schedule
+        name: Расписание
+        vertical: true
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: switch.b3_0_l600pro_71_maintenance_mode
+        name: Обслуживание
+        vertical: true
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: switch.b3_0_l600pro_71_photo_mode
+        name: Фото
+        vertical: true
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: switch.b3_0_l600pro_71_acclimation
+        name: Акклиматизация
+        vertical: true
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: button.b3_0_l600pro_71_re_send_current_state
+        name: Повторить
+        icon: mdi:sync
+        vertical: true
+        tap_action:
+          action: perform-action
+          perform_action: button.press
+          target:
+            entity_id: button.b3_0_l600pro_71_re_send_current_state
+
+  - type: markdown
+    title: Сегодня
+    content: |
+      {%- set p = 'b3_0_l600pro_71' -%}
+      {%- set conn = states('binary_sensor.' ~ p ~ '_connection') -%}
+      {%- set co2 = states('binary_sensor.' ~ p ~ '_co2_ready') -%}
+      {%- set mode_m = is_state('switch.' ~ p ~ '_maintenance_mode', 'on') -%}
+      {%- set mode_p = is_state('switch.' ~ p ~ '_photo_mode', 'on') -%}
+      {%- if conn == 'off' %}
+      <ha-alert alert-type="error">Светильник недоступен: {{ state_attr('binary_sensor.' ~ p ~ '_connection', 'last_error') }}</ha-alert>
+      {% endif -%}
+      {%- if co2 == 'off' and states('sensor.' ~ p ~ '_power') | float(0) > 0 %}
+      <ha-alert alert-type="warning">CO₂ не готов ({{ state_attr('binary_sensor.' ~ p ~ '_co2_ready', 'reason') }}), поэтому свет работает с пониженной яркостью.</ha-alert>
+      {% endif -%}
+      {%- if mode_m or mode_p -%}
+      {%- set sw = 'switch.' ~ p ~ ('_maintenance_mode' if mode_m else '_photo_mode') %}
+      <ha-alert alert-type="info">Режим {{ 'обслуживания' if mode_m else 'фото' }} до {{ as_timestamp(state_attr(sw, 'ends_at')) | timestamp_custom('%H:%M') }}, затем возврат к расписанию.</ha-alert>
+      {% endif %}
+      **Сейчас:** {{ states('sensor.' ~ p ~ '_current_step') }}
+
+      **Каналы** ({{ state_attr('sensor.' ~ p ~ '_step_channels', 'applies') or '–' }}): {{ states('sensor.' ~ p ~ '_step_channels') }} · мощность {{ state_attr('sensor.' ~ p ~ '_step_channels', 'power') or '–' }}
+
+      {% set nxt = states('sensor.' ~ p ~ '_next_step') -%}
+      {%- if nxt not in ['unknown', 'unavailable', 'none'] -%}
+      **Далее в {{ as_timestamp(nxt) | timestamp_custom('%H:%M') }}:** {{ state_attr('sensor.' ~ p ~ '_next_step', 'step') }}{% if state_attr('sensor.' ~ p ~ '_next_step', 'also') %} · также {{ state_attr('sensor.' ~ p ~ '_next_step', 'also') }}{% endif %}
+      {%- else -%}
+      **Далее:** расписание выключено
+      {%- endif %}
+
+      **День:** {{ states('sensor.' ~ p ~ '_all_steps') }}
+
+      **Свет:** {{ states('sensor.' ~ p ~ '_light_today') | float(0) | round(1) }} из {{ states('sensor.' ~ p ~ '_light_plan') | float(0) | round(1) }} ч полной мощности сегодня (по плану к этому времени {{ state_attr('sensor.' ~ p ~ '_light_today', 'planned_until_now') | float(0) | round(1) }}), свет {{ state_attr('sensor.' ~ p ~ '_light_plan', 'light_from') }}–{{ state_attr('sensor.' ~ p ~ '_light_plan', 'light_until') }}
+      {%- if not is_state('sensor.' ~ p ~ '_co2_schedule', 'unavailable') %}
+
+      **CO₂:** {{ states('sensor.' ~ p ~ '_co2_schedule') }}
+      {%- endif %}
+      {%- set acc = states('sensor.' ~ p ~ '_acclimation') -%}
+      {%- set nc = state_attr('sensor.' ~ p ~ '_acclimation', 'next_change') -%}
+      {%- set btn = state_attr('sensor.' ~ p ~ '_acclimation', 'back_to_normal') -%}
+      {%- if acc not in ['Not running', 'unknown', 'unavailable'] %}
+
+      **Акклиматизация:** {{ acc }}{% if nc %} · следующий шаг {{ strptime(nc, '%Y-%m-%d').strftime('%d.%m') }}{% endif %}{% if btn %} · обычное с {{ strptime(btn, '%Y-%m-%d').strftime('%d.%m') }}{% endif %}
+      {%- endif %}
+
+  - type: horizontal-stack
+    cards:
+      - type: gauge
+        entity: sensor.b3_0_l600pro_71_power
+        name: Мощность
+        min: 0
+        max: 100
+        severity:
+          green: 0
+          yellow: 90
+          red: 100
+      - type: history-graph
+        title: Свет за сегодня
+        hours_to_show: 24
+        entities:
+          - entity: sensor.b3_0_l600pro_71_power
+            name: Мощность
+
+  - type: entities
+    title: Каналы
+    show_header_toggle: false
+    entities:
+      - entity: number.b3_0_l600pro_71_1_r
+        name: Красный
+      - entity: number.b3_0_l600pro_71_2_g
+        name: Зелёный
+      - entity: number.b3_0_l600pro_71_3_b
+        name: Синий
+      - entity: number.b3_0_l600pro_71_4_uv
+        name: UV
+      - entity: number.b3_0_l600pro_71_5_fan
+        name: Вентилятор
+
+  - type: markdown
+    content: |
+      {%- set dev = device_id('light.b3_0_l600pro_71') -%}
+      <ha-icon icon="mdi:cog"></ha-icon> [Настройки (Настроить)](/config/integrations/integration/weekaqua) &nbsp;·&nbsp; <ha-icon icon="mdi:fishbowl-outline"></ha-icon> [Страница устройства](/config/devices/device/{{ dev }})

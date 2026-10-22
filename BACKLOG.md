@@ -9,8 +9,6 @@ Ideas and planned features, not yet built. Move an item to `CHANGELOG.md` when i
 
 ## Ideas
 
-- **Translate code-generated texts**: list choices (e.g. "At a fixed time", smoothness and curve names) via selector translation keys, and sensor values/notifications, so Russian is complete.
-
 - **Other Week Aqua models**: model codes 5745 and 5747–5752 use other protocols (already in the decompiled app); needs owners of those lights to test.
 - **Fewer reloads** when settings change (apply fade/power/schedule settings without reloading the integration).
 - **1.0.0** once the schedule has run for a week or two in daily use without problems.

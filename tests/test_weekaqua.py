@@ -452,7 +452,7 @@ async def test_fade_curve_smoothness_and_state_updates(hass, client):
     out = await run_fade(2700)
     assert out[-1] == "FBF97EEB69005555" and len(out) <= 2700 / 10 + 1
     # Fine + natural curve, 45-minute sunrise into White (7E EB 69 00)
-    out = await run_fade(2700, {"fade_interval": "0.5", "fade_curve": "perceptual"})
+    out = await run_fade(2700, {"fade_interval": "fine", "fade_curve": "perceptual"})
     levels = [bytes.fromhex(c)[3] for c in out]           # green channel
     print("fine/natural:", len(out), "commands,", len(states), "light state updates; first greens", levels[:8])
     assert out[-1] == "FBF97EEB69005555"
@@ -462,16 +462,16 @@ async def test_fade_curve_smoothness_and_state_updates(hass, client):
     assert mid < 235 / 2                                    # natural curve: dim for longer
 
     # Coarse: at most one command per 30 s
-    out = await run_fade(2700, {"fade_interval": "30", "fade_curve": "perceptual"})
+    out = await run_fade(2700, {"fade_interval": "coarse", "fade_curve": "perceptual"})
     print("coarse:", len(out), "commands")
     assert len(out) <= 2700 / 30 + 1 and out[-1] == "FBF97EEB69005555"
 
     # Linear + medium
-    out = await run_fade(600, {"fade_interval": "10", "fade_curve": "linear"})
+    out = await run_fade(600, {"fade_interval": "medium", "fade_curve": "linear"})
     greens = [bytes.fromhex(c)[3] for c in out]
     print("linear/medium:", len(out), "commands, half-way green", greens[len(greens)//2])
     assert len(out) <= 61 and abs(greens[len(greens) // 2] - 118) <= 5
-    assert entry.options["fade_interval"] == "10" and entry.options["fade_curve"] == "linear"
+    assert entry.options["fade_interval"] == "10" and entry.options["fade_curve"] == "linear"   # stored as seconds
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
@@ -490,13 +490,15 @@ async def test_schedule_step_fade_overrides(hass, client, freezer):
         flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "schedule"})
         flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_schedule"})
         labels = [o["label"] for o in next(v for k, v in flow["data_schema"].schema.items() if str(k) == "curve").config["options"]]
+        labels.append(flow["description_placeholders"]["general"])
         await hass.config_entries.options.async_configure(flow["flow_id"], values)
         await hass.async_block_till_done()
         return labels
 
     base = {"target": "White", "brightness": 100, "fade": 45, "days": [str(i) for i in range(7)]}
-    labels = await add({**base, "time": "08:00:00", "curve": "linear", "smoothness": "30"})
-    assert labels[0] == "Use general setting (Natural (follows how eyes see brightness))"
+    labels = await add({**base, "time": "08:00:00", "curve": "linear", "smoothness": "coarse"})
+    assert labels[0] == "Use general setting"
+    assert labels[-1] == "General setting now: curve natural, smoothness medium."   # shown in the description
     await add({**base, "time": "09:00:00", "target": "__off__", "curve": "default", "smoothness": "default"})
     steps = entry.options["schedule"]
     assert steps[0] == {"time": "08:00", "target": "White", "brightness": 100, "fade": 45.0,
@@ -1577,3 +1579,71 @@ def test_translations_match():
         assert set(other) == set(en_flat), f"{path.name}: keys differ: {set(other) ^ set(en_flat)}"
         for key, text in en_flat.items():
             assert set(re.findall(r"{\w+}", text)) == set(re.findall(r"{\w+}", other[key])), f"{path.name} {key}"
+
+
+def test_generated_texts_complete():
+    """Every generated text exists in every language, with the same {placeholders}."""
+    import re
+    from custom_components.weekaqua.texts import TEXTS
+    for lang, texts in TEXTS.items():
+        assert set(texts) == set(TEXTS["en"]), f"{lang}: {set(texts) ^ set(TEXTS['en'])}"
+        for key, text in TEXTS["en"].items():
+            assert set(re.findall(r"{\w+}", text)) == set(re.findall(r"{\w+}", texts[key])), f"{lang} {key}"
+        assert len(texts["days"].split(",")) == 7 and len(texts["months"].split(",")) == 12
+
+
+async def test_russian(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from custom_components.weekaqua.texts import set_language
+
+    hass.config.language = "ru"
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "14:00", "target": "Nature", "brightness": 100, "fade": 60, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 60, "days": every},
+             {"anchor": "sunset", "offset": -30, "target": "White", "brightness": 50, "fade": 0, "days": [5, 6]}]
+    freezer.move_to(datetime(2026, 10, 16, 16, 0, 0, tzinfo=tz))
+    hass.states.async_set("switch.co2_plug", "off")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps,
+                 "acclimation": {"start_brightness": 60, "brightness_step": 10, "interval_days": 7, "shorten": 90, "shorten_step": 30, "uv_holdback": True},
+                 "co2": {"enabled": True, "entity_id": "switch.co2_plug", "lead": 60, "fallback": 50}})
+    entry.add_to_hass(hass)
+    try:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        await entry.runtime_data.acclimation.async_start()
+        await hass.async_block_till_done()
+        st = lambda e: hass.states.get(f"sensor.b3_0_l600pro_71_{e}")  # noqa: E731
+        print(st("all_steps").state); print(st("current_step").state); print(st("acclimation").state)
+        # the sunset step (17:44 here) sorts before the 21:00 Off step
+        assert "(закат −30 мин) · Вкл · White 15%" in st("all_steps").attributes["step_2"]
+        assert st("all_steps").attributes["step_2"].endswith("· Сб–Вс")
+        assert st("all_steps").attributes["step_3"] == "19:30 (акклиматизация, обычно 21:00) · Выкл · переход 60 мин с 18:30 · каждый день"
+        assert st("current_step").state.startswith("14:00 · Вкл · Nature 30% (акклиматизация, UV 18%, CO₂ не готов, обычно 100%)")
+        assert st("acclimation").state == "60% (UV 36%) · короче на 1 ч 30 мин"
+        assert st("step_channels").attributes["applies"] == "текущий шаг"
+        assert hass.states.get("binary_sensor.b3_0_l600pro_71_co2_ready").attributes["reason"] == "CO₂ выключен (с 16:00)"
+        assert st("light_plan").attributes["note"].startswith("часы полной мощности")
+
+        # Configure: the acclimation plan with Russian dates; the schedule form's general setting
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "acclimation"})
+        print(flow["description_placeholders"]["plan_lines"])
+        assert flow["description_placeholders"]["plan_lines"].startswith("16 окт: 60% (UV 36%) · короче на 1 ч 30 мин ← сейчас")
+        assert "обычное расписание" in flow["description_placeholders"]["plan_lines"]
+        assert "обычное расписание с 13 ноя 2026" in flow["description_placeholders"]["status"]
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "schedule"})
+        flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_schedule"})
+        assert flow["description_placeholders"]["general"] == "Общая настройка сейчас: кривая естественная, плавность средне."
+
+        # An error message in Russian (slider over the power limit)
+        await hass.services.async_call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "Colorful"}, blocking=True)
+        with pytest.raises(Exception, match="Общая мощность была бы"):
+            await hass.services.async_call("number", "set_value", {"entity_id": "number.b3_0_l600pro_71_2_g", "value": 100}, blocking=True)
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    finally:
+        set_language("en")

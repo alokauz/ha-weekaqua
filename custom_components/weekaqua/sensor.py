@@ -22,6 +22,7 @@ from . import WeekAquaConfigEntry
 from .entity import WeekAquaEntity
 
 from .const import total_power
+from .texts import t
 from .schedule import OFF_TARGET, describe_step
 
 # Icons for what a step does: sun rising, sun setting, or a color change
@@ -98,11 +99,11 @@ class WeekAquaNextStep(WeekAquaEntity, SensorEntity):
             return {}
         if nxt[0] == "co2":
             control = self._device.co2_control
-            what = "CO₂ on" if nxt[1] == "on" else "CO₂ off"
+            what = t("co2_on") if nxt[1] == "on" else t("co2_off")
             when = nxt[2].strftime("%H:%M")
             detail = (
-                f"{control.on_before} min before the first On step"
-                if nxt[1] == "on" else f"{control.off_before} min before the light is off"
+                t("co2_on_detail", minutes=control.on_before)
+                if nxt[1] == "on" else t("co2_off_detail", minutes=control.off_before)
             )
             return {"step": f"{when} · {what} ({detail})", "kind": f"co2_{nxt[1]}"}
         step, when = nxt[1], nxt[2]
@@ -112,7 +113,7 @@ class WeekAquaNextStep(WeekAquaEntity, SensorEntity):
         # A CO₂ switch at the same minute is mentioned alongside the light step
         co2 = self._device.co2_control.next_event() if self._device.co2_control else None
         if co2 and co2[0] == when:
-            attrs["also"] = f"{when:%H:%M} · CO₂ {co2[1]}"
+            attrs["also"] = f"{when:%H:%M} · {t('co2_on') if co2[1] == 'on' else t('co2_off')}"
         return attrs
 
 
@@ -133,7 +134,7 @@ class WeekAquaCurrentStep(WeekAquaEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         if not self._scheduler.enabled:
-            return "Schedule off"
+            return t("schedule_off")
         step, _ = self._scheduler.last_step()
         if step is None:
             return None
@@ -177,31 +178,29 @@ class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
     def native_value(self) -> str:
         steps = self._scheduler.steps
         if not steps:
-            return "No steps"
+            return t("no_steps")
         sched = self._scheduler
         factor = sched.acclimation_factor()
-        parts = []
+        # (time, order at the same minute, text): CO₂ on before a light step, CO₂ off after it
+        timed = []
         for step in steps:
             at = sched.effective_time(step).strftime("%H:%M")
             if step["target"] == OFF_TARGET:
-                parts.append(f"{at} · Off")
+                timed.append((at, 1, f"{at} · {t('off')}"))
             elif factor < 1:
-                parts.append(f"{at} · On · {step['target']} {step.get('brightness', 100) * factor:g}%")
+                timed.append((at, 1, f"{at} · {t('on')} · {step['target']} {step.get('brightness', 100) * factor:g}%"))
             else:
-                parts.append(f"{at} · On · {step['target']}")
+                timed.append((at, 1, f"{at} · {t('on')} · {step['target']}"))
         control = self._device.co2_control
         if control is not None and control.enabled:
             on, off, _ = control.window()
             if on is not None:
-                timed = [(p.split(" · ")[0], p) for p in parts]
-                timed += [(f"{on:%H:%M}", f"{on:%H:%M} · CO₂ on"), (f"{off:%H:%M}", f"{off:%H:%M} · CO₂ off")]
-                # CO₂ on before a light step at the same minute, CO₂ off after it
-                order = {"CO₂ on": 0, "CO₂ off": 2}
-                parts = [p for _, p in sorted(timed, key=lambda tp: (tp[0], order.get(tp[1].split(" · ", 1)[1], 1)))]
-        summary = " | ".join(parts)
+                timed.append((f"{on:%H:%M}", 0, f"{on:%H:%M} · {t('co2_on')}"))
+                timed.append((f"{off:%H:%M}", 2, f"{off:%H:%M} · {t('co2_off')}"))
+        summary = " | ".join(text for _, _, text in sorted(timed, key=lambda x: (x[0], x[1])))
         acc = self._device.acclimation
         if acc is not None and acc.running:
-            summary += " (acclimation)"
+            summary += f" {t('with_acclimation')}"
         return summary if len(summary) <= 255 else summary[:252] + "..."
 
     @property
@@ -213,7 +212,7 @@ class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
         control = self._device.co2_control
         if control is not None and control.enabled:
             on, off, why = control.window()
-            attrs["co2"] = why if on is None else f"on {on:%H:%M}, off {off:%H:%M}"
+            attrs["co2"] = why if on is None else t("co2_window_attr", on=f"{on:%H:%M}", off=f"{off:%H:%M}")
         return attrs
 
 
@@ -310,11 +309,11 @@ class WeekAquaLastCommand(WeekAquaEntity, SensorEntity):
         return {
             "last_attempt": dt_util.as_local(d.last_attempt).isoformat() if d.last_attempt else None,
             "last_attempt_command": d.last_attempt_what,
-            "last_attempt_result": None if d.last_attempt_ok is None else ("delivered" if d.last_attempt_ok else f"failed: {d.last_error}"),
+            "last_attempt_result": None if d.last_attempt_ok is None else (t("delivered") if d.last_attempt_ok else t("failed", error=d.last_error)),
             "delivered_since_start": d.sent_ok,
             "failed_since_start": d.sent_failed,
             "retries_since_start": d.retries,
-            "note": "delivered = the Bluetooth write went through; the light can't confirm it applied it",
+            "note": t("delivered_note"),
         }
 
 
@@ -411,23 +410,23 @@ class WeekAquaStepChannels(WeekAquaEntity, SensorEntity):
         reasons = []
         if acc < 1:
             uv = sched.acclimation_uv_factor()
-            reasons.append(f"acclimation {acc * 100:g}%" + (f", UV held back to {round(uv * 100):g}%" if uv < acc else ""))
+            reasons.append(t("reason_acclimation", percent=f"{acc * 100:g}") + (t("reason_uv_held", percent=f"{round(uv * 100):g}") if uv < acc else ""))
         if co2 < 1:
-            reasons.append(f"CO₂ fallback {self._device.co2.fallback}%")
+            reasons.append(t("reason_co2", percent=self._device.co2.fallback))
         brightness = f"{round(normal * acc * co2, 1):g}%"
         if reasons:
-            brightness += f" ({', '.join(reasons)} of {normal}%)"
+            brightness = t("brightness_with_reasons", brightness=brightness, reasons=", ".join(reasons), normal=normal)
         attrs = {
-            "applies": "current step" if which == "now" else "next On step",
+            "applies": t("applies_now") if which == "now" else t("applies_next"),
             "step": f"{step['time']} · {step['target']}",
             "starts": dt_util.as_local(when).isoformat(),
             "brightness": brightness,
             "power": f"{total_power(levels):.0f}%",
             "levels": {"R": levels[0], "G": levels[1], "B": levels[2], "UV": levels[3]},
-            "levels_note": "raw values sent to the light, 0-235 (235 = 100 %)",
+            "levels_note": t("levels_note"),
         }
         if which == "next" and sched.co2 is not None and sched.co2.enabled:
-            attrs["co2_note"] = "a CO₂ fallback isn't included for a step that hasn't started"
+            attrs["co2_note"] = t("co2_note")
         return attrs
 
 
@@ -476,7 +475,7 @@ class WeekAquaLightPlan(WeekAquaEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         s = dict(self._summary)
         s.pop("planned_full_power_hours", None)
-        s["note"] = "full-power hours: 1 h at 100 % power = 1; relative light, not PAR/DLI. CO₂ fallback not included."
+        s["note"] = t("plan_note")
         return s
 
 
@@ -520,5 +519,5 @@ class WeekAquaLightToday(WeekAquaEntity, SensorEntity, RestoreEntity):
         return {
             "date": dt_util.now().date().isoformat(),
             "planned_until_now": round(planned_until_now(self._device.scheduler), 2),
-            "note": "full-power hours: 1 h at 100 % power = 1; relative light, not PAR/DLI",
+            "note": t("today_note"),
         }

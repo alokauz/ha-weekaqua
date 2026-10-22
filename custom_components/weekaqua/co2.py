@@ -26,6 +26,8 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
+from .texts import t
+
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULTS: dict[str, Any] = {"enabled": False, "entity_id": None, "lead": 60, "fallback": 50}
@@ -112,20 +114,20 @@ class CO2Interlock:
     def ready(self) -> tuple[bool, str]:
         """(ready, human-readable reason)."""
         if not self.enabled:
-            return True, "CO₂ interlock is off"
+            return True, t("co2_interlock_off")
         state = self.hass.states.get(self.entity_id)
         if state is None:
-            return False, f"{self.entity_id} doesn't exist"
+            return False, t("co2_missing", entity=self.entity_id)
         if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-            return False, f"the CO₂ plug is {state.state}"
+            return False, t("co2_plug_state", state=t("state_unavailable") if state.state == STATE_UNAVAILABLE else t("state_unknown"))
         if state.state != STATE_ON:
             since = dt_util.as_local(state.last_changed).strftime("%H:%M")
-            return False, f"CO₂ is off (since {since})"
+            return False, t("co2_is_off", time=since)
         ready_at = self.ready_at()
         since = dt_util.as_local(self._on_since()).strftime("%H:%M")
         if ready_at > dt_util.utcnow():
-            return False, f"CO₂ on since {since}, ready at {dt_util.as_local(ready_at):%H:%M} ({self.lead} min lead time)"
-        return True, f"CO₂ on since {since}"
+            return False, t("co2_waiting", since=since, ready=f"{dt_util.as_local(ready_at):%H:%M}", lead=self.lead)
+        return True, t("co2_on_since", since=since)
 
     def factor(self) -> float:
         """1.0 when ready, else the fallback share (never more than 1)."""

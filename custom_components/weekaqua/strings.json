@@ -143,7 +143,7 @@
       },
       "add_schedule": {
         "title": "Add or update a schedule step",
-        "description": "On steps start fading in at their time. Off steps are fully off at their time: their fade starts earlier (e.g. Off at 21:00 with a 60 min fade starts dimming at 20:00). Saving a step at a time that already exists (or with the same sunrise/sunset and offset) replaces it.\n\nCurrent schedule:\n{steps}",
+        "description": "On steps start fading in at their time. Off steps are fully off at their time: their fade starts earlier (e.g. Off at 21:00 with a 60 min fade starts dimming at 20:00). Saving a step at a time that already exists (or with the same sunrise/sunset and offset) replaces it. {general}\n\nCurrent schedule:\n{steps}",
         "data": {
           "time": "Time",
           "target": "Preset",
@@ -195,7 +195,7 @@
       },
       "edit_preset": {
         "title": "Edit a preset",
-        "description": "Choose the preset, and how you'd like to edit it. For a live power reading, load it onto the light, adjust it with the sliders on the device page while watching the Power sensor, then come back and choose Save what the light shows now into it.",
+        "description": "Choose the preset, and how you'd like to edit it. For a live power reading, load it onto the light, adjust it with the sliders on the device page while watching the Power sensor, then come back and choose Save what the light shows now into it.\n\n{light_now}",
         "data": {
           "preset": "Preset",
           "how": "How"
@@ -324,6 +324,77 @@
     "light_unreachable": {
       "title": "{name} can't be reached",
       "description": "Commands to {name} have been failing since {since}. The schedule keeps retrying, but the light may not be following it.\n\nCheck that the light has power, that the WEEK AQUA phone app isn't connected (the light accepts one connection), and that the Raspberry Pi's Bluetooth is in range.\n\nLast error: {error}\n\nThis notice disappears by itself once a command gets through."
+    }
+  },
+  "selector": {
+    "step_when": {
+      "options": {
+        "time": "At a fixed time",
+        "sunrise": "Relative to sunrise",
+        "sunset": "Relative to sunset"
+      }
+    },
+    "step_curve": {
+      "options": {
+        "default": "Use general setting",
+        "perceptual": "Natural (follows how eyes see brightness)",
+        "linear": "Linear (equal steps in LED power)"
+      }
+    },
+    "step_smoothness": {
+      "options": {
+        "default": "Use general setting",
+        "fine": "Fine (every level)",
+        "medium": "Medium (every 10 s at most)",
+        "coarse": "Coarse (every 30 s at most)",
+        "very_coarse": "Very coarse (every minute at most)"
+      }
+    },
+    "step_days": {
+      "options": {
+        "0": "Mon",
+        "1": "Tue",
+        "2": "Wed",
+        "3": "Thu",
+        "4": "Fri",
+        "5": "Sat",
+        "6": "Sun"
+      }
+    },
+    "acclimation_action": {
+      "options": {
+        "save": "Save settings only",
+        "start": "Start (or restart) from the beginning now",
+        "back": "Go back one step (e.g. algae appeared), and stay there a full interval",
+        "stop": "Stop: back to the normal schedule now"
+      }
+    },
+    "fade_smoothness": {
+      "options": {
+        "fine": "Fine (every level)",
+        "medium": "Medium (every 10 s at most)",
+        "coarse": "Coarse (every 30 s at most)",
+        "very_coarse": "Very coarse (every minute at most)"
+      }
+    },
+    "fade_curve": {
+      "options": {
+        "perceptual": "Natural (follows how eyes see brightness)",
+        "linear": "Linear (equal steps in LED power)"
+      }
+    },
+    "input_mode": {
+      "options": {
+        "slider": "Slider",
+        "box": "Type a number"
+      }
+    },
+    "edit_how": {
+      "options": {
+        "form": "Edit the values here",
+        "load": "Load it onto the light, to adjust it live on the device page",
+        "save_light": "Save what the light shows now into it"
+      }
     }
   }
 }

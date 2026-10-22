@@ -24,6 +24,7 @@ from .acclimation import Acclimation
 from .co2 import CO2Interlock
 from .co2_control import CO2Control
 from .device import WeekAquaDevice
+from .texts import set_language
 from .schedule import WeekAquaScheduler
 
 PLATFORMS = [
@@ -41,6 +42,8 @@ type WeekAquaConfigEntry = ConfigEntry[WeekAquaDevice]
 
 async def async_setup_entry(hass: HomeAssistant, entry: WeekAquaConfigEntry) -> bool:
     """Set up a light from a config entry."""
+    # Texts the integration writes itself follow Home Assistant's language
+    set_language(hass.config.language)
     address = entry.data[CONF_ADDRESS]
     name = entry.data.get(CONF_NAME) or entry.title
     device = WeekAquaDevice(hass, address, name, entry.options.get(CONF_PRESETS, {}))

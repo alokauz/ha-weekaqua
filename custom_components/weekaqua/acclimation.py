@@ -24,6 +24,8 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .texts import format_date, t
+
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULTS: dict[str, Any] = {
@@ -44,10 +46,10 @@ def describe_minutes(minutes: float) -> str:
     minutes = int(round(minutes))
     hours, rest = divmod(minutes, 60)
     if hours and rest:
-        return f"{hours} h {rest} min"
+        return t("hours_minutes", hours=hours, minutes=rest)
     if hours:
-        return f"{hours} h"
-    return f"{rest} min"
+        return t("hours", hours=hours)
+    return t("minutes", minutes=rest)
 
 
 class Acclimation:
@@ -184,16 +186,16 @@ class Acclimation:
     def summary(self) -> str:
         """Short text for the sensor."""
         if self.state["finished"]:
-            return "Finished"
+            return t("acc_finished")
         if not self.running:
-            return "Not running"
+            return t("acc_not_running")
         brightness, shorter = self.values(self.stage())
         text = f"{brightness:g}%"
         if self.settings.get("uv_holdback") and brightness < 100:
-            text += f" (UV {round(self.uv_brightness(brightness)):g}%)"
+            text += t("acc_uv", percent=f"{round(self.uv_brightness(brightness)):g}")
         if shorter:
-            text += f" · {describe_minutes(shorter)} shorter"
-        return ("Paused · " if self.paused else "") + text
+            text += t("acc_shorter", minutes=describe_minutes(shorter))
+        return (t("acc_paused") if self.paused else "") + text
 
     # ---- actions ------------------------------------------------------
 
@@ -209,11 +211,14 @@ class Acclimation:
         await self._save()
         brightness, shorter = self.values(0)
         self._message(
-            "Acclimation started",
-            f"The schedule now runs at {brightness:g}% brightness"
-            + (f" and a {describe_minutes(shorter)} shorter light period" if shorter else "")
-            + f". It steps up every {self.settings['interval_days']} days and returns to your"
-            f" normal schedule on {self.ends():%d %b %Y}.",
+            t("acc_started_title"),
+            t(
+                "acc_started",
+                brightness=f"{brightness:g}",
+                shorter=t("acc_started_shorter", minutes=describe_minutes(shorter)) if shorter else "",
+                interval=self.settings["interval_days"],
+                end=format_date(self.ends(), year=True),
+            ),
         )
         self._notify()
 
@@ -223,7 +228,7 @@ class Acclimation:
         self.state.update(started=None, paused_since=None, paused_days=0, finished=None, stage_notified=None)
         await self._save()
         if was_running:
-            self._message("Acclimation stopped", "The light is back on your normal schedule.")
+            self._message(t("acc_stopped_title"), t("acc_stopped"))
         self._notify()
 
     def plan(self, settings: dict[str, Any] | None = None, start: date | None = None) -> list[str]:
@@ -239,14 +244,14 @@ class Acclimation:
             brightness, shorter = preview.values(stage)
             day = start + timedelta(days=stage * int(preview.settings["interval_days"]) + paused)
             uv = (
-                f" (UV {round(brightness * brightness / 100):g}%)"
+                t("acc_uv", percent=f"{round(brightness * brightness / 100):g}")
                 if preview.settings.get("uv_holdback") and brightness < 100 else ""
             )
-            what = "normal schedule" if stage == preview.total_stages() else (
-                f"{brightness:g}%{uv}" + (f" · {describe_minutes(shorter)} shorter" if shorter else "")
+            what = t("plan_normal") if stage == preview.total_stages() else (
+                f"{brightness:g}%{uv}" + (t("acc_shorter", minutes=describe_minutes(shorter)) if shorter else "")
             )
-            mark = " ← now" if self.running and settings is None and stage == self.stage() else ""
-            lines.append(f"{day:%d %b}: {what}{mark}")
+            mark = t("plan_now") if self.running and settings is None and stage == self.stage() else ""
+            lines.append(t("plan_line", date=format_date(day), what=what + mark))
         return lines
 
     async def async_step_back(self) -> None:
@@ -261,10 +266,14 @@ class Acclimation:
         await self._save()
         brightness, shorter = self.values(self.stage())
         self._message(
-            "Acclimation went back one step",
-            f"Now {brightness:g}% brightness"
-            + (f", light period {describe_minutes(shorter)} shorter than normal" if shorter else "")
-            + f". Next step on {self.next_change():%d %b}; back to normal on {self.ends():%d %b %Y}.",
+            t("acc_back_title"),
+            t(
+                "acc_back",
+                brightness=f"{brightness:g}",
+                period=t("acc_step_shorter", minutes=describe_minutes(shorter)) if shorter else "",
+                next=format_date(self.next_change()),
+                end=format_date(self.ends(), year=True),
+            ),
         )
         self._notify()
 
@@ -290,10 +299,7 @@ class Acclimation:
         if stage >= self.total_stages():
             self.state["finished"] = self._today().isoformat()
             await self._save()
-            self._message(
-                "Acclimation finished",
-                "The light is now on your normal schedule. The program has ended by itself.",
-            )
+            self._message(t("acc_finished_title"), t("acc_finished_msg"))
             _LOGGER.info("Acclimation finished")
             self._notify()
             return
@@ -303,11 +309,14 @@ class Acclimation:
             brightness, shorter = self.values(stage)
             nxt = self.next_change()
             self._message(
-                "Acclimation stepped up",
-                f"Now {brightness:g}% brightness"
-                + (f", light period {describe_minutes(shorter)} shorter than normal" if shorter else ", normal light period")
-                + (f". Next step on {nxt:%d %b}" if nxt else "")
-                + f". Back to normal on {self.ends():%d %b %Y}.",
+                t("acc_step_title"),
+                t(
+                    "acc_step",
+                    brightness=f"{brightness:g}",
+                    period=t("acc_step_shorter", minutes=describe_minutes(shorter)) if shorter else t("acc_step_normal_period"),
+                    next=t("acc_next", date=format_date(nxt)) if nxt else "",
+                    end=format_date(self.ends(), year=True),
+                ),
             )
             _LOGGER.info("Acclimation stage %s: %s%%, %s min shorter", stage, brightness, shorter)
             self._notify()
@@ -316,6 +325,6 @@ class Acclimation:
         persistent_notification.async_create(
             self.hass,
             message,
-            title=f"Week Aqua: {title}",
+            title=f"Week Aqua: {title}",  # title already translated
             notification_id=f"weekaqua_acclimation_{self.entry_id}",
         )

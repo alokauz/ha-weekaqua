@@ -179,7 +179,7 @@ During a fade, entity states are updated every 30 s and at the end (not every st
 
 ## Languages
 
-English and Russian. Some list choices, sensor values and notifications are still English only.
+English and Russian: menus, forms, list choices, entity names and everything the integration writes itself (sensor values, plans, notifications, errors) follow Home Assistant's language (**Settings → System → General → Language**). Log lines stay English. Russian dashboard cards: `dashboard/weekaqua-card.ru.yaml` and `dashboard/weekaqua-chart.ru.yaml`.
 
 ## Troubleshooting
 

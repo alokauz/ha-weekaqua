@@ -1,0 +1,79 @@
+# Week Aqua: план света на день по каналам, с линией «сейчас».
+# Нужна карточка "ApexCharts Card" (HACS → поиск "apexcharts-card" → Скачать).
+# Добавить: Панель → ⋮ → Изменить панель → Добавить карточку → Вручную, вставьте это.
+# Если ID объектов не начинаются с "b3_0_l600pro_71", замените это ниже.
+type: custom:apexcharts-card
+header:
+  show: true
+  title: План света на сегодня
+  show_states: false
+graph_span: 24h
+span:
+  start: day
+now:
+  show: true
+  label: Сейчас
+apex_config:
+  legend:
+    show: true
+  tooltip:
+    x:
+      format: HH:mm
+yaxis:
+  - min: 0
+    max: 100
+    decimals: 0
+    apex_config:
+      title:
+        text: "%"
+all_series_config:
+  stroke_width: 2
+  curve: straight
+series:
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: Красный
+    color: "#FF5C6C"
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.r];
+      });
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: Зелёный
+    color: "#38D98A"
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.g];
+      });
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: Синий
+    color: "#3D8BFF"
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.b];
+      });
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: UV
+    color: "#A35CFF"
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.uv];
+      });
+  - entity: sensor.b3_0_l600pro_71_light_plan
+    name: Мощность
+    color: "#9E9E9E"
+    stroke_width: 3
+    stroke_dash: 4
+    data_generator: |
+      return entity.attributes.curve.map((p) => {
+        const [h, m] = p.t.split(":");
+        const d = new Date(); d.setHours(+h, +m, 0, 0);
+        return [d.getTime(), p.power];
+      });
