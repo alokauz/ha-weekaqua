@@ -74,7 +74,7 @@ Your presets appear at the top of the **Preset** picker (most recently used firs
 
 ## Built-in schedule
 
-Under **Configure → Schedule → Add or update a step**, choose a time, a preset (or *Off*), a brightness, a fade duration and the days. **On** steps start fading in at their time; **Off** steps are fully off at their time, with the fade starting earlier, so the light period runs from the On time to the Off time. Each step can also use its own fade curve and smoothness instead of the general fade settings. Saving a step at an existing time replaces it. Example photoperiod:
+Under **Configure → Schedule → Add or update a step**, choose when (a fixed time, or relative to **sunrise** or **sunset**, e.g. sunset −30 min, recalculated daily from your Home Assistant location), a preset (or *Off*), a brightness, a fade duration and the days. **On** steps start fading in at their time; **Off** steps are fully off at their time, with the fade starting earlier, so the light period runs from the On time to the Off time. Each step can also use its own fade curve and smoothness instead of the general fade settings. Saving a step at an existing time replaces it. Example photoperiod:
 
 | Time | Preset | Fade | Days |
 |---|---|---|---|
@@ -98,6 +98,7 @@ For a new tank, new plants or new livestock, **Configure → Acclimation** bring
 
 - **Brightness** starts at a share of your schedule's brightness (e.g. 60 %) and rises by a step (e.g. 10 %) at each interval (e.g. 7 days).
 - **Light period** starts shorter (Off steps run e.g. 2 h earlier, never before the previous step's fade has ended) and gets longer by a step (e.g. 30 min) at each interval.
+- **Hold back UV** (optional): UV starts lower and catches up, following the square of the brightness (60 % → UV 36 %), and reaches normal with everything else.
 - **Configure → Acclimation** shows the plan date by date. **Go back one step** (e.g. if algae appear) repeats the previous stage for a full interval.
 - It stops at your normal schedule and **finishes by itself**, so it can't run away if you forget about it.
 - You get a **notification** at every step. The **Acclimation** sensor shows the current level, the next step and the end date. The **Acclimation** switch pauses it (the level is held and the days don't count) and resumes it.
@@ -121,6 +122,15 @@ The same screen can also **switch the CO₂ plug** from the light schedule: on a
 ## Maintenance and photo modes
 
 The **Maintenance mode** and **Photo mode** switches show a preset for a set time, skipping schedule steps, then fade back to the schedule by themselves. Choose each mode's preset and duration under **Configure → Maintenance and photo modes**.
+
+## Daily light
+
+- **Light plan**: today's planned light in *full-power hours* (1 h at 100 % total power = 1 full-power hour, 2 h at 50 % too), the light period and the peak power. Its `curve` attribute has the whole day's R/G/B/UV/power curve (every 5 min). It follows the schedule as it would run today, including fades, acclimation (and UV hold-back) and the power limit, not a CO₂ fallback.
+- **Light today**: the light actually delivered so far today, with `planned_until_now` to compare. Resets at midnight.
+
+Full-power hours are a *relative* measure for comparing days, schedules and acclimation weeks. They are not PAR or DLI, which would need a PAR meter.
+
+**Chart**: [`dashboard/weekaqua-chart.yaml`](dashboard/weekaqua-chart.yaml) draws the day's planned channels and power with a *now* line. It needs the **ApexCharts card** (HACS → search "apexcharts-card"). Add it like the main card (Manual card, paste).
 
 ## Dashboard card
 
@@ -167,7 +177,13 @@ The light can't fade on command, so the integration sends a series of small leve
 
 During a fade, entity states are updated every 30 s and at the end (not every step), which keeps the recorder database small. Touching any slider, preset or the light during a fade stops it. If Home Assistant restarts mid-fade, the built-in schedule continues it after startup.
 
+## Languages
+
+English and Russian. Some list choices, sensor values and notifications are still English only.
+
 ## Troubleshooting
+
+Please report problems with the **Bug report** form under *Issues* on GitHub.
 
 The **Connection** and **Last command** sensors (Diagnostic section of the device page) show whether commands reach the light; the light can't confirm it applied them. **Last command**'s details show the last attempted command in words and counters of delivered, failed and retried commands. If the light doesn't look like what Home Assistant shows (e.g. after using the phone app), press **Re-send current state**. If the light has been unreachable for 10 minutes, a notice appears under **Settings → Repairs** and disappears by itself once a command gets through. For bug reports, use **⋮ → Download diagnostics** on the integration.
 

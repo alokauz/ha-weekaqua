@@ -44,6 +44,7 @@ Installed by users through HACS from this repository. Owner: Flint.
 | `acclimation.py` | Acclimation program: ramps brightness and light period up to the normal schedule, then finishes; progress in a `Store`, notifications |
 | `co2.py` | CO₂ interlock: watches the CO₂ plug entity, ready after the lead time, fallback factor; treats a plug already on at HA start as ready |
 | `co2_control.py` | Optional CO₂ control: plug on before the first On step, off before the last Off step, daily maximum, per-minute watchdog switching it off outside the window |
+| `lightplan.py` | Simulates the day minute by minute (fades, curves, acclimation, UV hold-back, power limit) for the Light plan sensor; full-power hours = integral of total power |
 | `binary_sensor.py` | Connection, CO₂ ready |
 | `diagnostics.py` | Download diagnostics |
 | `light.py` | RGBW light (white = UV), transitions, presets as effects |
@@ -54,6 +55,7 @@ Installed by users through HACS from this repository. Owner: Flint.
 | `sensor.py` | Power, Next step, Current step, All steps |
 | `config_flow.py` | Bluetooth discovery + the **Configure** menu (options flow) |
 | `strings.json` + `translations/en.json` | UI texts — **keep both identical** |
+| `translations/ru.json` | Russian: same keys and `{placeholders}` as English (a test enforces it). Add every new text here too. Where a text names a list option that is still English in the UI, quote the English label |
 | `brand/icon.png`, `brand/icon@2x.png` | Integration icon (256 / 512 px), rendered from `assets/icon.svg` |
 
 ## Design decisions to keep
@@ -64,6 +66,7 @@ Installed by users through HACS from this repository. Owner: Flint.
   every 30 s during a fade (recorder database size). Any manual change cancels
   a fade. A fade retries its final level if the last steps failed.
 - Step timing: On steps start fading in at their time; Off steps are fully off at their time (fade starts `fade` minutes earlier, shortened if it would overlap the previous step's fade). `Scheduler.effective_time` = target time (with acclimation), `run_window`/`run_time`/`run_fade` = when and how long it actually runs.
+- Sun-based steps: options store `anchor` (sunrise/sunset) + `offset` and no `time`; `Scheduler.config_steps` keeps them as configured, `Scheduler.steps` has today's resolved `time` (re-resolved at midnight). Identify steps with `step_key()` (time, or e.g. `sunset-30`), never by `time` alone.
 - Schedule steps are keyed by time (saving the same time replaces a step).
   Failed steps retry every 30 s for 10 min. After HA starts, the light is put
   where the schedule says (continuing a fade). Not on reloads.

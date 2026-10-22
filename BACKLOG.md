@@ -4,29 +4,14 @@ Ideas and planned features, not yet built. Move an item to `CHANGELOG.md` when i
 
 ## Planned
 
-### Daily light amount
-
-A sensor showing the day's light as **full-power hours**: the integral of total power over the day, e.g. "4.3 h of full power today", plus the planned amount for the whole day from the schedule.
-
-- For comparing schedules and acclimation weeks.
-- Honest about what it is: relative light from the channel levels and the power weights, **not** PAR/PPFD or DLI (that needs a PAR meter; channel photon output, optics, water depth and mounting height all differ).
-- Later, optional: a PAR calibration profile (measured PPFD at the substrate/canopy for a few channel combinations) to estimate DLI, clearly labelled as estimated.
-
-### Daily light chart
-
-A view of the whole day: R, G, B and UV over 24 h with sunrise and sunset ramps, the Off times, the current time, and the effect of acclimation and the CO₂ fallback.
-
-- Done in part: the dashboard card has a 24-hour graph of the **Power** sensor (what actually happened).
-- Next step: a sensor with the day's planned curve (time → channel levels) in its attributes, plus a ready-made dashboard card config for a chart card (e.g. ApexCharts card from HACS).
-- Possible later: a custom card with drag-to-edit schedule points (a separate frontend project, much larger).
+- **PAR calibration (optional)**: measured PPFD at the substrate for a few channel combinations, to estimate DLI from the Light plan; clearly labelled as estimated.
+- **Drag-to-edit schedule card**: a custom card for editing steps on the daily curve (a separate frontend project).
 
 ## Ideas
 
-- **Hold back UV during acclimation**: an option for the UV channel to start lower and catch up more slowly than R/G/B (e.g. UV at half the acclimation percentage, reaching normal in the last stage), because UV and strong blue right after a tank reset are said to encourage algae (unverified community advice). Must still end exactly at the normal schedule, like the rest of acclimation, and the Step channels sensor and the plan in Configure must show it.
+- **Translate code-generated texts**: list choices (e.g. "At a fixed time", smoothness and curve names) via selector translation keys, and sensor values/notifications, so Russian is complete.
 
 - **Other Week Aqua models**: model codes 5745 and 5747–5752 use other protocols (already in the decompiled app); needs owners of those lights to test.
-- **Sunrise/sunset-based schedule steps** (e.g. "30 min before sunset") in the built-in schedule.
-- **Translations**, e.g. Russian.
 - **Fewer reloads** when settings change (apply fade/power/schedule settings without reloading the integration).
 - **1.0.0** once the schedule has run for a week or two in daily use without problems.
 - **HACS default store** listing (pull request to `hacs/default`) around 1.0.0.

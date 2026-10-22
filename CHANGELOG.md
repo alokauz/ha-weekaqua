@@ -2,6 +2,16 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0b1
+
+- **Light plan** sensor: today's planned light in *full-power hours* (1 h at 100 % power = 1; a relative measure, not PAR/DLI), the light period and peak power, and the whole day's R/G/B/UV/power curve for charts. Follows the schedule as it runs today, incl. fades, acclimation and the power limit.
+- **Light today** sensor: the light actually delivered so far today in full-power hours, with the planned amount until now for comparison. Resets at midnight, survives restarts.
+- **Daily light chart**: [`dashboard/weekaqua-chart.yaml`](dashboard/weekaqua-chart.yaml) for the ApexCharts card (HACS). The main card's *Today* summary shows a **Light** line.
+- **Sunrise/sunset-based schedule steps**: Configure → Schedule → *When*: at a fixed time, or relative to sunrise or sunset (e.g. sunset −30 min), recalculated every day from your Home Assistant location.
+- **Hold back UV** during acclimation (Configure → Acclimation): UV follows the square of the brightness (60 % → UV 36 %, 80 % → UV 64 %) and reaches normal with everything else.
+- **Russian translation** of the settings, menus, entity names and the Repairs notice (some list choices, sensor values and notifications are still in English).
+- Bug report form on GitHub; the release workflow refuses a version without a changelog entry.
+
 ## 0.10.0rc2
 
 - **Re-send current state** button: sends the fan speed and channel levels Home Assistant believes the light has, e.g. after the phone app changed the light or when a command may have been missed. Also on the dashboard card.

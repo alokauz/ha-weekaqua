@@ -1554,3 +1554,26 @@ async def test_sun_based_steps(hass, client, freezer):
     await hass.async_block_till_done()
     assert not any(s.get("anchor") == "sunrise" for s in entry.options["schedule"])
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+def test_translations_match():
+    """Every translation has exactly the English keys and the same {placeholders}."""
+    import json, pathlib, re
+    folder = pathlib.Path(__file__).parent.parent / "custom_components" / "weekaqua" / "translations"
+    en = json.loads((folder / "en.json").read_text())
+    strings = json.loads((folder.parent / "strings.json").read_text())
+    assert strings == en
+
+    def flat(x, p=""):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                yield from flat(v, f"{p}.{k}" if p else k)
+        else:
+            yield p, x
+
+    en_flat = dict(flat(en))
+    for path in folder.glob("*.json"):
+        other = dict(flat(json.loads(path.read_text())))
+        assert set(other) == set(en_flat), f"{path.name}: keys differ: {set(other) ^ set(en_flat)}"
+        for key, text in en_flat.items():
+            assert set(re.findall(r"{\w+}", text)) == set(re.findall(r"{\w+}", other[key])), f"{path.name} {key}"

@@ -315,7 +315,7 @@
       "co2_backstop_required": "Set up an off schedule or auto-off in the plug itself first, then tick this box."
     },
     "abort": {
-      "loaded": "{name} is now on the light. Adjust it with the sliders on the device page (the Power sensor shows the total live), then open Configure → Edit a preset → {name} → Save what the light shows now into it.",
+      "loaded": "{name} is now on the light. Adjust it with the sliders on the device page (the Power sensor shows the total live), then open Configure → Presets → Edit a preset → {name} → Save what the light shows now into it.",
       "cannot_apply": "Couldn't reach the light (is the phone app connected?). Nothing was changed.",
       "light_off": "The light is off, so there's nothing to save. Turn it on or load the preset first."
     }
