@@ -135,3 +135,8 @@ cards:
         name: UV
       - entity: number.b3_0_l600pro_71_5_fan
         name: Fan
+
+  - type: markdown
+    content: |
+      {%- set dev = device_id('light.b3_0_l600pro_71') -%}
+      <ha-icon icon="mdi:cog"></ha-icon> [Settings (Configure)](/config/integrations/integration/weekaqua) &nbsp;·&nbsp; <ha-icon icon="mdi:fishbowl-outline"></ha-icon> [Device page](/config/devices/device/{{ dev }})

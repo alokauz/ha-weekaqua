@@ -124,7 +124,7 @@ The **Maintenance mode** and **Photo mode** switches show a preset for a set tim
 
 ## Dashboard card
 
-[`dashboard/weekaqua-card.yaml`](dashboard/weekaqua-card.yaml) is a ready-made card using only Home Assistant's standard cards: the light with brightness and preset, the preset picker, Schedule / Maintenance / Photo / Acclimation switches, a **Today** summary (warnings when the light can't be reached, CO₂ isn't ready or a mode is on; what's happening now, the actual channel values, what's next, the day's timeline with CO₂, acclimation progress), a power gauge with a 24-hour graph, and the channel sliders.
+[`dashboard/weekaqua-card.yaml`](dashboard/weekaqua-card.yaml) is a ready-made card using only Home Assistant's standard cards: the light with brightness and preset, the preset picker, Schedule / Maintenance / Photo / Acclimation switches, a **Today** summary (warnings when the light can't be reached, CO₂ isn't ready or a mode is on; what's happening now, the actual channel values, what's next, the day's timeline with CO₂, acclimation progress), a power gauge with a 24-hour graph, the channel sliders, and links to the integration's settings (**Configure**) and the light's device page.
 
 To add it: open your dashboard → ⋮ → **Edit dashboard** → **Add card** → **Manual**, and paste the file's contents. If your entity IDs don't start with `b3_0_l600pro_71`, replace that text everywhere in the card (find an ID under **Settings → Entities**).
 

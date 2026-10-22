@@ -38,6 +38,10 @@ def _markdown(card):
     return next(c["content"] for c in card["cards"] if c["type"] == "markdown")
 
 
+def _links(card):
+    return [c["content"] for c in card["cards"] if c["type"] == "markdown"][-1]
+
+
 async def _setup(hass, freezer):
     tz = dt_util.get_default_time_zone()
     every = [0, 1, 2, 3, 4, 5, 6]
@@ -105,4 +109,15 @@ async def test_summary_when_things_go_wrong(hass, client, freezer):
     assert '<ha-alert alert-type="info">Maintenance mode until 17:00' in text
     assert "**Acclimation:** 60% · 2 h shorter · next step 23 Oct · normal from 13 Nov" in text
     client.write_gatt_char.side_effect = None
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_links(hass, client, freezer):
+    from homeassistant.helpers import device_registry as dr
+    entry = await _setup(hass, freezer)
+    text = Template(_links(_card()), hass).async_render(parse_result=False)
+    print(text)
+    device = dr.async_get(hass).async_get_device(connections={(dr.CONNECTION_BLUETOOTH, ADDR)})
+    assert "[Settings (Configure)](/config/integrations/integration/weekaqua)" in text
+    assert f"[Device page](/config/devices/device/{device.id})" in text
     assert await hass.config_entries.async_unload(entry.entry_id)
