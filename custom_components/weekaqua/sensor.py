@@ -300,6 +300,19 @@ class WeekAquaLastCommand(WeekAquaEntity, SensorEntity):
     def native_value(self):
         return self._device.last_success
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        d = self._device
+        return {
+            "last_attempt": dt_util.as_local(d.last_attempt).isoformat() if d.last_attempt else None,
+            "last_attempt_command": d.last_attempt_what,
+            "last_attempt_result": None if d.last_attempt_ok is None else ("delivered" if d.last_attempt_ok else f"failed: {d.last_error}"),
+            "delivered_since_start": d.sent_ok,
+            "failed_since_start": d.sent_failed,
+            "retries_since_start": d.retries,
+            "note": "delivered = the Bluetooth write went through; the light can't confirm it applied it",
+        }
+
 
 class WeekAquaCO2Schedule(WeekAquaEntity, SensorEntity):
     """Today's CO₂ window when CO₂ control is on, e.g. '14:00–20:00 (6 h)'."""

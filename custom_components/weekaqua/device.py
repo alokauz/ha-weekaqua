@@ -83,6 +83,13 @@ class WeekAquaDevice:
         self.failures = 0
         self.first_failure = None
         self._connection_listeners: list[Callable[[], None]] = []
+        # What was last tried (whether or not it got through), and counters since start
+        self.last_attempt = None
+        self.last_attempt_what: str | None = None
+        self.last_attempt_ok: bool | None = None
+        self.sent_ok = 0
+        self.sent_failed = 0
+        self.retries = 0
         # Keep total power at or below 100 %, like the app (Configure can turn it off)
         self.power_limit = True
         # Fade settings (from Configure): shortest seconds between commands, and curve
@@ -319,11 +326,14 @@ class WeekAquaDevice:
     async def send(self, *payloads: bytes) -> None:
         """Send one or more commands, 500 ms apart (like the app)."""
         async with self._lock:
+            self.last_attempt = dt_util.utcnow()
+            self.last_attempt_what = " + ".join(describe_command(p) for p in payloads)
             try:
                 try:
                     await self._write(payloads)
                 except (BleakError, TimeoutError) as err:
                     _LOGGER.debug("Write failed (%s), reconnecting and retrying", err)
+                    self.retries += 1
                     await self._disconnect()
                     try:
                         await self._write(payloads)
@@ -338,12 +348,27 @@ class WeekAquaDevice:
             self._record_success()
             self._schedule_disconnect()
 
+    async def resend(self) -> None:
+        """Send what Home Assistant believes the light shows (fan, then channels).
+
+        For when the phone app changed the light, or a command may have been
+        missed. Doesn't change any state; a running fade continues.
+        """
+        payloads = []
+        if self.fan is not None:
+            payloads.append(fan_cmd(self.fan))
+        payloads.append(levels_cmd(self.levels))
+        _LOGGER.info("Re-sending current state: %s", " + ".join(describe_command(p) for p in payloads))
+        await self.send(*payloads)
+
     # ---- connection diagnostics ---------------------------------------
     # The light never answers, so "success" means the Bluetooth write went
     # through, not that the light confirmed the change.
 
     @callback
     def _record_success(self) -> None:
+        self.sent_ok += 1
+        self.last_attempt_ok = True
         recovered = self.failures > 0
         self.last_success = dt_util.utcnow()
         self.failures = 0
@@ -355,6 +380,8 @@ class WeekAquaDevice:
 
     @callback
     def _record_failure(self, error: str) -> None:
+        self.sent_failed += 1
+        self.last_attempt_ok = False
         now = dt_util.utcnow()
         self.failures += 1
         self.last_error = error
@@ -496,3 +523,18 @@ def describe_duration(seconds: float) -> str:
     if seconds >= 60:
         return f"{seconds / 60:.1f} min".replace(".0 min", " min")
     return f"{seconds:.0f} s"
+
+
+def describe_command(payload: bytes) -> str:
+    """A command in words, e.g. 'R 51% G 100% B 51% UV 0%' or 'fan 40%'."""
+    if payload[:2] == b"\xfb\xf9":
+        return describe_levels(payload[2:6])
+    if payload[:1] == b"\xfc":
+        return f"fan {round(payload[1] / MAX_LEVEL * 100)}%"
+    if payload[:1] == b"\xff":
+        return f"clock {payload[1]:02x}:{payload[2]:02x}:{payload[3]:02x}"
+    if payload[:2] == b"\xfd\xf1":
+        return "light's own simple schedule"
+    if payload[:2] == b"\xfd\xf2":
+        return "light's own advanced schedule"
+    return payload.hex().upper()

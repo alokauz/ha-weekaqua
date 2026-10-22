@@ -45,6 +45,12 @@ async def async_get_config_entry_diagnostics(
             "failing_since": _iso(device.first_failure),
             "last_error": device.last_error,
             "last_error_time": _iso(device.last_error_time),
+            "last_attempt": _iso(device.last_attempt),
+            "last_attempt_command": device.last_attempt_what,
+            "last_attempt_ok": device.last_attempt_ok,
+            "delivered_since_start": device.sent_ok,
+            "failed_since_start": device.sent_failed,
+            "retries_since_start": device.retries,
         },
         "schedule": {
             "enabled": sched.enabled,

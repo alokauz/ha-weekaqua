@@ -44,6 +44,9 @@
       },
       "advanced_schedule": {
         "name": "Resume advanced schedule"
+      },
+      "resend": {
+        "name": "Re-send current state"
       }
     },
     "select": {

@@ -1303,3 +1303,53 @@ async def test_step_channels_sensor(hass, client, freezer):
     assert st.attributes["levels"] == {"R": 36, "G": 70, "B": 36, "UV": 0}
     assert sent(client)[-1] == "FBF9244624005555"                          # what the light got
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_resend_and_attempt_diagnostics(hass, client):
+    from bleak.exc import BleakError
+    from custom_components.weekaqua.device import describe_command
+    from custom_components.weekaqua.const import clock_cmd, fan_cmd, levels_cmd, CMD_SIMPLE_SCHEDULE
+
+    # Commands in words
+    assert describe_command(levels_cmd((120, 235, 120, 70))) == "R 51% G 100% B 51% UV 30%"
+    assert describe_command(fan_cmd(40)) == "fan 40%"
+    assert describe_command(clock_cmd(14, 30, 5)) == "clock 14:30:05"
+    assert describe_command(CMD_SIMPLE_SCHEDULE) == "light's own simple schedule"
+
+    entry = await setup(hass)
+    call = hass.services.async_call
+    last = "sensor.b3_0_l600pro_71_last_command"
+    await call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "Nature"}, blocking=True)
+    await call("number", "set_value", {"entity_id": "number.b3_0_l600pro_71_5_fan", "value": 40}, blocking=True)
+    a = hass.states.get(last).attributes
+    assert a["last_attempt_command"] == "fan 40%" and a["last_attempt_result"] == "delivered"
+    assert a["delivered_since_start"] == 2 and a["failed_since_start"] == 0 and a["retries_since_start"] == 0
+
+    # Re-send: fan, then channels, exactly what HA believes; nothing else changes
+    client.write_gatt_char.reset_mock()
+    await call("button", "press", {"entity_id": "button.b3_0_l600pro_71_re_send_current_state"}, blocking=True)
+    assert sent(client) == ["FC5E555555555555", "FBF977EB77005555"]
+    assert hass.states.get(last).attributes["last_attempt_command"] == "fan 40% + R 51% G 100% B 51% UV 0%"
+    assert hass.states.get("select.b3_0_l600pro_71_preset").state == "Nature"
+
+    # A write that fails once and succeeds on the retry: delivered, 1 retry
+    fails = {"n": 1}
+    async def flaky(*args, **kwargs):
+        if fails["n"]:
+            fails["n"] -= 1
+            raise BleakError("busy")
+    client.write_gatt_char.side_effect = flaky
+    await call("button", "press", {"entity_id": "button.b3_0_l600pro_71_re_send_current_state"}, blocking=True)
+    a = hass.states.get(last).attributes
+    assert a["last_attempt_result"] == "delivered" and a["retries_since_start"] == 1
+
+    # A command that doesn't get through at all
+    client.write_gatt_char.side_effect = BleakError("out of range")
+    with pytest.raises(Exception):
+        await call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "White"}, blocking=True)
+    a = hass.states.get(last).attributes
+    assert a["last_attempt_command"] == "R 54% G 100% B 45% UV 0%"
+    assert a["last_attempt_result"].startswith("failed:") and "out of range" in a["last_attempt_result"]
+    assert a["failed_since_start"] == 1 and a["delivered_since_start"] == 4
+    client.write_gatt_char.side_effect = None
+    assert await hass.config_entries.async_unload(entry.entry_id)

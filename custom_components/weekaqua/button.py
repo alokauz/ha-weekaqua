@@ -20,6 +20,7 @@ async def async_setup_entry(
     device = entry.runtime_data
     async_add_entities(
         [
+            WeekAquaResendButton(device),
             WeekAquaButton(device, "sync_clock", "mdi:clock-check", None),
             WeekAquaButton(device, "simple_schedule", "mdi:calendar-clock", CMD_SIMPLE_SCHEDULE),
             WeekAquaButton(device, "advanced_schedule", "mdi:calendar-clock-outline", CMD_ADVANCED_SCHEDULE),
@@ -44,3 +45,16 @@ class WeekAquaButton(WeekAquaEntity, ButtonEntity):
             self._device.cancel_fade()
             payloads.append(self._mode_cmd)
         await self._device.send(*payloads)
+
+
+class WeekAquaResendButton(WeekAquaEntity, ButtonEntity):
+    """Send what Home Assistant believes the light shows, e.g. after using the phone app."""
+
+    _attr_translation_key = "resend"
+    _attr_icon = "mdi:sync"
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "resend")
+
+    async def async_press(self) -> None:
+        await self._device.resend()

@@ -2,6 +2,11 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.10.0rc2
+
+- **Re-send current state** button: sends the fan speed and channel levels Home Assistant believes the light has, e.g. after the phone app changed the light or when a command may have been missed. Also on the dashboard card.
+- **Last command** sensor details: the last *attempted* command in words (e.g. `R 51% G 100% B 51% UV 0%`, `fan 40%`), whether it was delivered or failed (and why), and how many commands were delivered, failed and retried since Home Assistant started. "Delivered" means the Bluetooth write went through; the light can't confirm it applied it.
+
 ## 0.10.0rc1
 
 - Release candidate for 0.10.0, with everything from the 0.10.0 betas. Same code as 0.10.0b10, renumbered: GitHub and HACS sort release names character by character, so "b10" was listed before "b2" and HACS didn't offer it.

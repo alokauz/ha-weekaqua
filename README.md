@@ -169,7 +169,7 @@ During a fade, entity states are updated every 30 s and at the end (not every st
 
 ## Troubleshooting
 
-The **Connection** and **Last command** sensors (Diagnostic section of the device page) show whether commands reach the light; the light can't confirm it applied them. If the light has been unreachable for 10 minutes, a notice appears under **Settings → Repairs** and disappears by itself once a command gets through. For bug reports, use **⋮ → Download diagnostics** on the integration.
+The **Connection** and **Last command** sensors (Diagnostic section of the device page) show whether commands reach the light; the light can't confirm it applied them. **Last command**'s details show the last attempted command in words and counters of delivered, failed and retried commands. If the light doesn't look like what Home Assistant shows (e.g. after using the phone app), press **Re-send current state**. If the light has been unreachable for 10 minutes, a notice appears under **Settings → Repairs** and disappears by itself once a command gets through. For bug reports, use **⋮ → Download diagnostics** on the integration.
 
 
 Enable debug logging and include the `weekaqua` log lines when opening an issue:
