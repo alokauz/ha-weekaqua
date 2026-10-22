@@ -28,7 +28,6 @@ A view of the whole day: R, G, B and UV over 24 h with sunrise and sunset ramps,
 - **Sunrise/sunset-based schedule steps** (e.g. "30 min before sunset") in the built-in schedule.
 - **Translations**, e.g. Russian.
 - **Fewer reloads** when settings change (apply fade/power/schedule settings without reloading the integration).
-- **Release checks**: make the release workflow refuse a version without a `CHANGELOG.md` entry.
 - **1.0.0** once the schedule has run for a week or two in daily use without problems.
 - **HACS default store** listing (pull request to `hacs/default`) around 1.0.0.
-- **README screenshots** and a **bug report template** before announcing it (forum, Reddit, aquarium groups).
+- **README screenshots** before announcing it (forum, Reddit, aquarium groups).

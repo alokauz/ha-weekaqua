@@ -61,6 +61,12 @@ jobs:
             echo "::error::$TAG has a two-digit pre-release number, which GitHub and HACS would sort wrongly. Use the next rc or patch version instead."
             exit 1
           fi
+          # Every version needs its CHANGELOG.md section: it becomes the release
+          # notes that Home Assistant shows in the update dialog.
+          if ! grep -qx "## $VERSION" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## $VERSION' section. Add the key changes, then push again."
+            exit 1
+          fi
           # Release notes: this version's section of CHANGELOG.md + full changelog link
           python3 .github/release_notes.py "$VERSION" > notes.md
           prev=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)

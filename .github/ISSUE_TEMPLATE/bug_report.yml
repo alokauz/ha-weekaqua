@@ -1,0 +1,75 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The details below make it much faster to find the cause.
+        Please **close the WEEK AQUA phone app** before testing: the light accepts only one Bluetooth connection.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      placeholder: "1. Configure → Schedule → ...\n2. ..."
+  - type: input
+    id: light
+    attributes:
+      label: Light model
+      placeholder: e.g. L600 Pro
+    validations:
+      required: true
+  - type: input
+    id: ble_name
+    attributes:
+      label: Bluetooth name of the light
+      description: Shown when the integration discovers the light, e.g. B3.0-L600pro-71
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Integration version
+      description: HACS → Week Aqua, e.g. 0.11.0b1
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      description: Settings → About
+    validations:
+      required: true
+  - type: dropdown
+    id: bluetooth
+    attributes:
+      label: Bluetooth adapter
+      options:
+        - Built-in (e.g. Raspberry Pi)
+        - USB dongle
+        - ESPHome Bluetooth proxy
+        - Other / not sure
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Settings → Devices & services → Week Aqua → ⋮ → Download diagnostics. Drag the file in here.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines
+      description: |
+        With this in configuration.yaml (then restart):
+        ```yaml
+        logger:
+          logs:
+            custom_components.weekaqua: debug
+        ```
+        Settings → System → Logs → Show raw logs, search for "weekaqua".
+      render: text
