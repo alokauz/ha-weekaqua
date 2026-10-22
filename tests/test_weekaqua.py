@@ -1484,3 +1484,73 @@ async def test_light_plan_with_acclimation(hass, client, freezer):
     assert st.attributes["light_until"] == "20:00"
     assert abs(float(st.state) - normal * 6 / 7 * 0.6) < 0.05
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_sun_based_steps(hass, client, freezer):
+    from datetime import date, datetime, timedelta
+    from homeassistant.helpers.sun import get_astral_event_date
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+
+    def expected(event, day, offset):
+        t = dt_util.as_local(get_astral_event_date(hass, event, day)) + timedelta(minutes=offset)
+        return f"{t.hour:02d}:{t.minute:02d}"
+
+    steps = [{"time": "14:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"anchor": "sunset", "offset": -30, "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    freezer.move_to(datetime(2026, 10, 16, 10, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options={"schedule": steps})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sched = entry.runtime_data.scheduler
+
+    off_today = expected("sunset", date(2026, 10, 16), -30)
+    assert sched.steps[1]["time"] == off_today
+    nxt = hass.states.get("sensor.b3_0_l600pro_71_next_step").attributes["step"]
+    assert nxt.startswith("14:00 · On")
+    steps_txt = hass.states.get("sensor.b3_0_l600pro_71_all_steps").attributes["step_2"]
+    print(off_today, steps_txt)
+    assert steps_txt == f"{off_today} (sunset −30 min) · Off · every day"
+
+    # It fires at today's computed time
+    await hass.services.async_call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "Nature"}, blocking=True)
+    client.write_gatt_char.reset_mock()
+    hh, mm = (int(x) for x in off_today.split(":"))
+    freezer.move_to(datetime(2026, 10, 16, hh, mm, 0, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent(client)[-1] == "FBF9000000005555"
+
+    # Next day it moves with the sun (in October, sunset gets earlier)
+    freezer.move_to(datetime(2026, 10, 17, 0, 0, 1, tzinfo=tz)); async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    off_tomorrow = expected("sunset", date(2026, 10, 17), -30)
+    assert sched.steps[1]["time"] == off_tomorrow and off_tomorrow < off_today
+
+    # Configure: add a sunrise step; the same anchor+offset replaces it; remove by its key
+    async def add(values):
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "schedule"})
+        flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_schedule"})
+        res = await hass.config_entries.options.async_configure(flow["flow_id"], values)
+        await hass.async_block_till_done()
+        return res
+    base = {"time": "08:00:00", "target": "White", "brightness": 100, "fade": 30, "curve": "default",
+            "smoothness": "default", "days": [str(i) for i in every]}
+    await add({**base, "when": "sunrise", "offset": 60})
+    await add({**base, "when": "sunrise", "offset": 60, "brightness": 80})
+    sun = [s for s in entry.options["schedule"] if s.get("anchor") == "sunrise"]
+    assert len(sun) == 1 and sun[0]["offset"] == 60 and sun[0]["brightness"] == 80 and "time" not in sun[0]
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "schedule"})
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "remove_schedule"})
+    keys = [o["value"] for o in next(iter(flow["data_schema"].schema.values())).config["options"]]
+    assert "sunrise+60" in keys and "sunset-30" in keys and "14:00" in keys
+    await hass.config_entries.options.async_configure(flow["flow_id"], {"remove": ["sunrise+60"]})
+    await hass.async_block_till_done()
+    assert not any(s.get("anchor") == "sunrise" for s in entry.options["schedule"])
+    assert await hass.config_entries.async_unload(entry.entry_id)

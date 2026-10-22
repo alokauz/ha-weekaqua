@@ -143,7 +143,7 @@
       },
       "add_schedule": {
         "title": "Add or update a schedule step",
-        "description": "On steps start fading in at their time. Off steps are fully off at their time: their fade starts earlier (e.g. Off at 21:00 with a 60 min fade starts dimming at 20:00). Saving a step at a time that already exists replaces it.\n\nCurrent schedule:\n{steps}",
+        "description": "On steps start fading in at their time. Off steps are fully off at their time: their fade starts earlier (e.g. Off at 21:00 with a 60 min fade starts dimming at 20:00). Saving a step at a time that already exists (or with the same sunrise/sunset and offset) replaces it.\n\nCurrent schedule:\n{steps}",
         "data": {
           "time": "Time",
           "target": "Preset",
@@ -151,13 +151,18 @@
           "fade": "Fade duration",
           "days": "Days",
           "curve": "Fade curve",
-          "smoothness": "Fade smoothness"
+          "smoothness": "Fade smoothness",
+          "when": "When",
+          "offset": "Offset from sunrise/sunset"
         },
         "data_description": {
           "brightness": "Ignored for Off.",
           "fade": "On: how long the sunrise takes from the step's time. Off: how long before the step's time the sunset starts. 0 = switch instantly.",
           "curve": "Only used when the step fades.",
-          "smoothness": "Only used when the step fades."
+          "smoothness": "Only used when the step fades.",
+          "when": "A fixed time, or relative to your location's sunrise or sunset (recalculated every day).",
+          "offset": "Minutes before (−) or after (+) sunrise/sunset. Only used for sun-based steps.",
+          "time": "Only used for steps at a fixed time."
         }
       },
       "remove_schedule": {

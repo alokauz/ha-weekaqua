@@ -18,6 +18,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
 from homeassistant.core import callback
+from homeassistant.util import dt as dt_util
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -59,7 +60,7 @@ from .device import describe_levels
 from .co2 import DEFAULTS as CO2_DEFAULTS
 from .co2_control import CONTROLLABLE_DOMAINS as CO2_CONTROLLABLE, DEFAULTS as CO2_CONTROL_DEFAULTS
 from .acclimation import DEFAULTS as ACCLIMATION_DEFAULTS, Acclimation, describe_minutes
-from .schedule import ALL_DAYS, DAY_NAMES, OFF_TARGET, describe_step, step_time
+from .schedule import ALL_DAYS, DAY_NAMES, OFF_TARGET, describe_step, resolve_sun_time, step_key, step_time
 
 CONF_FAN = "fan"
 CONF_APPLY = "apply"
@@ -157,6 +158,12 @@ class WeekAquaOptionsFlow(OptionsFlow):
     def _custom(self) -> dict[str, dict]:
         return dict(self.config_entry.options.get(CONF_PRESETS, {}))
 
+    def _resolved(self, step: dict[str, Any]) -> dict[str, Any]:
+        """A step with today's time filled in (for sun-based steps)."""
+        if step.get("anchor"):
+            return {**step, "time": resolve_sun_time(self.hass, step, dt_util.now().date()) or "--:--"}
+        return step
+
     def _steps(self) -> list[dict[str, Any]]:
         return list(self.config_entry.options.get(CONF_SCHEDULE, []))
 
@@ -187,7 +194,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
         if self._steps():
             menu.append("remove_schedule")
         presets = self.config_entry.runtime_data.presets
-        current = "\n".join(describe_step(s, presets) for s in self._steps()) or "(no steps yet)"
+        current = "\n".join(describe_step(self._resolved(s), presets) for s in self._steps()) or "(no steps yet)"
         return self.async_show_menu(
             step_id="schedule", menu_options=menu, description_placeholders={"steps": current}
         )
@@ -202,14 +209,19 @@ class WeekAquaOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            hh, mm = (int(x) for x in user_input["time"].split(":")[:2])
+            when = user_input.get("when", "time")
+            sun_step = {"anchor": when, "offset": int(user_input.get("offset", 0))} if when != "time" else None
+            at = (
+                resolve_sun_time(self.hass, sun_step, dt_util.now().date()) if sun_step else user_input["time"][:5]
+            ) or "12:00"
+            hh, mm = (int(x) for x in at.split(":")[:2])
             if not user_input["days"]:
                 errors["days"] = "no_days"
             elif user_input["target"] == "__off__" and hh * 60 + mm < float(user_input.get("fade", 0)):
                 errors["fade"] = "fade_before_midnight"
             else:
                 step = {
-                    "time": user_input["time"][:5],
+                    **({"anchor": sun_step["anchor"], "offset": sun_step["offset"]} if sun_step else {"time": user_input["time"][:5]}),
                     "target": user_input["target"],
                     "brightness": int(user_input.get("brightness", 100)),
                     "fade": float(user_input.get("fade", 0)),
@@ -221,8 +233,9 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 if user_input.get("smoothness", "default") != "default":
                     step["smoothness"] = user_input["smoothness"]
                 # One step per time: saving the same time again replaces it.
-                steps = [s for s in self._steps() if s["time"] != step["time"]] + [step]
-                steps.sort(key=step_time)
+                # One step per time (or per sun anchor + offset): saving it again replaces it
+                steps = [s for s in self._steps() if step_key(s) != step_key(step)] + [step]
+                steps.sort(key=lambda s: s.get("time") or "")
                 return self._save(**{CONF_SCHEDULE: steps})
 
         presets = self.config_entry.runtime_data.ordered_presets()
@@ -243,7 +256,20 @@ class WeekAquaOptionsFlow(OptionsFlow):
         defaults = user_input or {}
         schema = vol.Schema(
             {
+                vol.Required("when", default=defaults.get("when", "time")): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value="time", label="At a fixed time"),
+                            SelectOptionDict(value="sunrise", label="Relative to sunrise"),
+                            SelectOptionDict(value="sunset", label="Relative to sunset"),
+                        ],
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
                 vol.Required("time", default=defaults.get("time", "08:00:00")): TimeSelector(),
+                vol.Required("offset", default=defaults.get("offset", 0)): NumberSelector(
+                    NumberSelectorConfig(min=-360, max=360, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)
+                ),
                 vol.Required("target", default=defaults.get("target", presets[0])): SelectSelector(
                     SelectSelectorConfig(options=targets, mode=SelectSelectorMode.DROPDOWN)
                 ),
@@ -264,7 +290,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 ),
             }
         )
-        current = "\n".join(describe_step(s, presets) for s in self._steps()) or "(none yet)"
+        current = "\n".join(describe_step(self._resolved(s), presets) for s in self._steps()) or "(none yet)"
         acc = self.config_entry.runtime_data.acclimation
         if acc is not None and acc.running:
             current += f"\n(Acclimation is running: {acc.summary()}. These are your normal values; see Configure → Acclimation.)"
@@ -281,10 +307,10 @@ class WeekAquaOptionsFlow(OptionsFlow):
         steps = self._steps()
         if user_input is not None:
             remove = set(user_input["remove"])
-            return self._save(**{CONF_SCHEDULE: [s for s in steps if s["time"] not in remove]})
+            return self._save(**{CONF_SCHEDULE: [s for s in steps if step_key(s) not in remove]})
         presets = self.config_entry.runtime_data.presets
         options = [
-            SelectOptionDict(value=s["time"], label=describe_step(s, presets)) for s in steps
+            SelectOptionDict(value=step_key(s), label=describe_step(self._resolved(s), presets)) for s in steps
         ]
         return self.async_show_form(
             step_id="remove_schedule",
@@ -711,7 +737,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
 
         prefill, self._prefill = self._prefill, None
         values = user_input or prefill or self._as_form_values(preset)
-        used_by = [s["time"] for s in self._steps() if s["target"] == old_name]
+        used_by = [describe_step(self._resolved(s)).split(" · ")[0] for s in self._steps() if s["target"] == old_name]
         return self.async_show_form(
             step_id="edit_preset_values",
             data_schema=self._preset_schema(values, values.get(CONF_NAME, old_name), True),

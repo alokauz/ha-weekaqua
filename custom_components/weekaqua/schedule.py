@@ -39,6 +39,37 @@ SMOOTHNESS_SHORT = {"0.5": "fine", "10": "medium", "30": "coarse", "60": "very c
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
+def step_key(step: dict[str, Any]) -> str:
+    """What identifies a step: its fixed time, or its sun anchor and offset ('sunset-30')."""
+    if step.get("anchor"):
+        return f"{step['anchor']}{int(step.get('offset', 0)):+d}"
+    return step["time"]
+
+
+def describe_anchor(step: dict[str, Any]) -> str:
+    """'sunset −30 min', 'sunrise +15 min', 'sunset'."""
+    offset = int(step.get("offset", 0))
+    if not offset:
+        return step["anchor"]
+    return f"{step['anchor']} {'+' if offset > 0 else '−'}{abs(offset)} min"
+
+
+def resolve_sun_time(hass: HomeAssistant, step: dict[str, Any], day) -> str | None:
+    """HH:MM of a sun-based step on a day (None if the sun doesn't rise/set there)."""
+    from homeassistant.helpers.sun import get_astral_event_date
+
+    event = get_astral_event_date(hass, step["anchor"], day)
+    if event is None:
+        return None
+    local = dt_util.as_local(event) + timedelta(minutes=int(step.get("offset", 0)))
+    # An offset that crosses midnight is kept on the day itself
+    if local.date() > day:
+        return "23:59"
+    if local.date() < day:
+        return "00:00"
+    return f"{local.hour:02d}:{local.minute:02d}"
+
+
 def step_time(step: dict[str, Any]) -> time:
     hour, minute = (int(part) for part in step["time"].split(":")[:2])
     return time(hour, minute)
@@ -46,6 +77,7 @@ def step_time(step: dict[str, Any]) -> time:
 
 def describe_step(step: dict[str, Any], presets: dict | None = None) -> str:
     """Human-readable summary, e.g. '08:00 · On · Nature 80% · fade 45 min · Mon–Fri'."""
+    anchor = f" ({describe_anchor(step)})" if step.get("anchor") else ""
     if step["target"] == OFF_TARGET:
         what = "Off"
     else:
@@ -77,7 +109,7 @@ def describe_step(step: dict[str, Any], presets: dict | None = None) -> str:
         day_text = "Sat–Sun"
     else:
         day_text = ", ".join(DAY_NAMES[d] for d in days)
-    return f"{step['time']} · {what}{fade} · {day_text}"
+    return f"{step.get('time', '--:--')}{anchor} · {what}{fade} · {day_text}"
 
 
 class WeekAquaScheduler:
@@ -88,7 +120,10 @@ class WeekAquaScheduler:
     ) -> None:
         self.hass = hass
         self.device = device
-        self.steps = sorted(steps, key=step_time)
+        # As configured (sun steps without a time) and as they run today
+        self.config_steps = list(steps)
+        self.steps: list[dict[str, Any]] = []
+        self.resolve()
         self.enabled = True
         self.acclimation = None  # set in __init__.py
         self.co2 = None  # set in __init__.py
@@ -101,6 +136,21 @@ class WeekAquaScheduler:
         self._listeners: list[Callable[[], None]] = []
         # Bumped whenever a newer step starts, so a retrying older step gives up.
         self._generation = 0
+
+    @callback
+    def resolve(self, day=None) -> None:
+        """Today's steps: sun-based steps get today's time (skipped if the sun doesn't rise/set)."""
+        day = day or dt_util.now().date()
+        resolved = []
+        for step in self.config_steps:
+            if step.get("anchor"):
+                at = resolve_sun_time(self.hass, step, day)
+                if at is None:
+                    _LOGGER.warning("No %s on %s: skipping step %s", step["anchor"], day, step_key(step))
+                    continue
+                step = {**step, "time": at}
+            resolved.append(step)
+        self.steps = sorted(resolved, key=step_time)
 
     @callback
     def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
@@ -193,6 +243,10 @@ class WeekAquaScheduler:
 
     @callback
     def start(self) -> None:
+        if any(s.get("anchor") for s in self.config_steps):
+            self._unsubs.append(
+                async_track_time_change(self.hass, self._new_day, hour=0, minute=0, second=1)
+            )
         for step in self.steps:
             at = self.run_time(step)
             self._unsubs.append(
@@ -200,6 +254,12 @@ class WeekAquaScheduler:
                     self.hass, partial(self._fire, step), hour=at.hour, minute=at.minute, second=0
                 )
             )
+
+    @callback
+    def _new_day(self, _now: datetime) -> None:
+        """Sun-based steps move a little every day."""
+        self.resolve()
+        self.reschedule()
 
     @callback
     def stop(self) -> None:
