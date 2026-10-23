@@ -2,6 +2,11 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0b4
+
+- **Fade** sensor: shows the running fade, e.g. `Sunrise to Nature · 23 min left`, with its start and end channel values, start and end times, duration, progress, curve, smoothness, time between steps and what started it (a schedule step, Back to schedule, the light/an automation, CO₂ interlock, a mode ending, acclimation, catch-up after a restart). When no fade runs: `No fade`, with a note about the last fade (completed or interrupted, and when).
+- The dashboard cards' *Today* summary shows a **Fading** line while a fade runs.
+
 ## 0.11.0b3
 
 - **Back to schedule** button: after a manual change (e.g. picking a preset during a sunrise, which stops the fade), puts the light where the schedule says it should be now — continuing an interrupted fade for its remaining time, otherwise fading there over a minute. Also ends maintenance/photo mode. On both dashboard cards.

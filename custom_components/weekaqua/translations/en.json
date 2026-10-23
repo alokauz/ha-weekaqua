@@ -101,6 +101,9 @@
       },
       "light_today": {
         "name": "Light today"
+      },
+      "fade": {
+        "name": "Fade"
       }
     },
     "binary_sensor": {

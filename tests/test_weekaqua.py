@@ -1695,3 +1695,72 @@ async def test_back_to_schedule_after_manual_change(hass, client, freezer):
     await hass.async_block_till_done(wait_background_tasks=True)
     assert sent(client)[-1] == "FBF977EB77005555"
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_fade_sensor(hass, client, freezer):
+    import asyncio
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "14:00", "target": "Nature", "brightness": 100, "fade": 60, "days": every, "smoothness": "30"},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 60, "days": every}]
+    freezer.move_to(datetime(2026, 10, 16, 13, 59, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options={"schedule": steps})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    fade = "sensor.b3_0_l600pro_71_fade"
+    assert hass.states.get(fade).state == "No fade"
+    gate = asyncio.Event()
+    quick = asyncio.sleep
+    async def slow(delay):
+        if delay > 1:
+            await gate.wait()
+        else:
+            await quick(delay)
+    with patch("custom_components.weekaqua.device.asyncio.sleep", slow):
+        freezer.move_to(datetime(2026, 10, 16, 14, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        freezer.move_to(datetime(2026, 10, 16, 14, 37, 0, tzinfo=tz))
+        entry.runtime_data._notify(); await asyncio.sleep(0)
+        st = hass.states.get(fade)
+        print(st.state, st.attributes)
+        assert st.state == "Sunrise to Nature · 23 min left"
+        a = st.attributes
+        assert a["active"] and a["from"] == "R 0% G 0% B 0% UV 0%" and a["to"] == "R 51% G 100% B 51% UV 0%"
+        assert a["duration_minutes"] == 60.0 and a["progress"] == "62%"
+        assert a["curve"] == "natural" and a["smoothness"] == "coarse" and a["step_every_seconds"] == 30.0
+        assert a["source"] == "schedule step 14:00"
+        assert a["ends"].startswith("2026-10-16T15:00")
+        # Interrupted by picking a preset
+        await hass.services.async_call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "White"}, blocking=True)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        st = hass.states.get(fade)
+        assert st.state == "No fade" and st.attributes["last_fade"] == "Nature, started by schedule step 14:00, interrupted at 14:37"
+        # Back to schedule: a new fade, started by the button
+        await hass.services.async_call("button", "press", {"entity_id": "button.b3_0_l600pro_71_back_to_schedule"}, blocking=True)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        st = hass.states.get(fade)
+        assert st.state == "Change to Nature · 23 min left" and st.attributes["source"] == "Back to schedule"
+        gate.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    st = hass.states.get(fade)
+    assert st.state == "No fade" and st.attributes["last_fade"].startswith("Nature, started by Back to schedule, completed")
+    # A sunset reads without "to Off"
+    with patch("custom_components.weekaqua.device.asyncio.sleep", slow):
+        gate.clear()
+        await hass.services.async_call("light", "turn_off", {"entity_id": "light.b3_0_l600pro_71", "transition": 600}, blocking=True)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        st = hass.states.get(fade)
+        assert st.state == "Sunset · 10 min left" and st.attributes["source"] == "the light (automation or controls)"
+        gate.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert await hass.config_entries.async_unload(entry.entry_id)

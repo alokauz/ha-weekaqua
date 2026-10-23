@@ -170,6 +170,8 @@ automation:
 
 ### How fades work
 
+The **Fade** sensor shows the running fade (e.g. *Sunrise to Nature · 23 min left*) with its curve, smoothness, progress and what started it; when none runs, its details say how the last one ended.
+
 The light can't fade on command, so the integration sends a series of small level changes. Under **Configure → Light settings → Fade smoothness and curve**:
 
 - **Curve** – *Natural* (default) moves evenly in *perceived* brightness (gamma 2.2), so sunrises don't seem to jump up at the start and sunsets don't drop off at the end. *Linear* moves in equal steps of LED power.

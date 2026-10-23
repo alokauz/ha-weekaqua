@@ -357,13 +357,13 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 if action == "start":
                     acc.settings = {**acc.settings, **settings}
                     await acc.async_start()
-                    await device.scheduler.apply_current()
+                    await device.scheduler.apply_current(source=t("src_acclimation"))
                 elif action == "stop":
                     await acc.async_stop()
                     await device.scheduler.apply_current()
                 elif action == "back":
                     await acc.async_step_back()
-                    await device.scheduler.apply_current(min_transition=300)
+                    await device.scheduler.apply_current(min_transition=300, source=t("src_acclimation"))
                 return self._save(**{CONF_ACCLIMATION: settings})
 
         values = user_input or acc.settings

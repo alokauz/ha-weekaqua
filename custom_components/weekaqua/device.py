@@ -77,6 +77,9 @@ class WeekAquaDevice:
         self._listeners: list[Callable[[], None]] = []
         self._fade_task: asyncio.Task | None = None
         self.input_mode = "slider"
+        # The running fade, for the Fade sensor (None when no fade runs)
+        self.fade_info: dict | None = None
+        self.last_fade: dict | None = None
         # Light delivered today, in full-power hours (see lightplan.py)
         self.light_today = 0.0
         self.light_date = None
@@ -171,6 +174,7 @@ class WeekAquaDevice:
         scale: float | tuple[float, float, float, float] = 1.0,
         fade_interval: float | None = None,
         fade_curve: str | None = None,
+        source: str | None = None,
     ) -> None:
         """Go to a preset (fading if requested) and set its fan speed, if it has one.
 
@@ -181,7 +185,7 @@ class WeekAquaDevice:
             await self.set_fan(fan)
         scales = scale if isinstance(scale, tuple) else (scale,) * 4
         levels = tuple(round(v * f) for v, f in zip(self.presets[preset_name], scales))
-        await self.set_levels(levels, transition, fade_interval, fade_curve)
+        await self.set_levels(levels, transition, fade_interval, fade_curve, source=source)
 
     @property
     def fading(self) -> bool:
@@ -193,6 +197,7 @@ class WeekAquaDevice:
         was_fading = self.fading
         if was_fading:
             self._fade_task.cancel()
+            self._end_fade_info(completed=False)
         self._fade_task = None
         self.target = self.levels
         if was_fading:
@@ -205,8 +210,11 @@ class WeekAquaDevice:
         fade_interval: float | None = None,
         fade_curve: str | None = None,
         strict: bool = False,
+        source: str | None = None,
     ) -> None:
         """Go to new channel levels, instantly or fading over `transition` seconds.
+
+        source says what started it (for the Fade sensor), e.g. "schedule step 14:00".
 
         fade_interval / fade_curve override the general fade settings for this fade.
         Above 100 % total power the levels are scaled down, or with strict=True
@@ -230,13 +238,25 @@ class WeekAquaDevice:
         self.cancel_fade()
         if transition and transition > 0 and target != self.levels:
             self.target = target
+            interval = self.fade_interval if fade_interval is None else fade_interval
+            curve = fade_curve or self.fade_curve
+            # What the Fade sensor shows while this runs
+            self.fade_info = {
+                "from": self.levels,
+                "to": target,
+                "began": dt_util.utcnow(),
+                "duration": float(transition),
+                "curve": curve,
+                "interval": interval,
+                "source": source or t("src_light"),
+            }
             self._fade_task = self.hass.async_create_background_task(
                 self._fade(
                     self.levels,
                     target,
                     float(transition),
-                    self.fade_interval if fade_interval is None else fade_interval,
-                    fade_curve or self.fade_curve,
+                    interval,
+                    curve,
                 ),
                 f"weekaqua fade {self.address}",
             )
@@ -245,6 +265,13 @@ class WeekAquaDevice:
         await self._apply(target)
         self.target = target
         self._notify()
+
+    @callback
+    def _end_fade_info(self, completed: bool) -> None:
+        """Keep a short note of the fade that just ended (interrupted or completed)."""
+        if self.fade_info is not None:
+            self.last_fade = {**self.fade_info, "ended": dt_util.utcnow(), "completed": completed}
+        self.fade_info = None
 
     async def _apply(self, levels: tuple[int, int, int, int]) -> None:
         await self.send(levels_cmd(levels))
@@ -359,6 +386,7 @@ class WeekAquaDevice:
         else:
             if self.levels != target:
                 _LOGGER.warning("Fade could not reach its target %s", target)
+        self._end_fade_info(completed=self.levels == target)
         self._fade_task = None
         self._notify()  # final state, and "fading" is now false
 

@@ -10,6 +10,7 @@ from homeassistant.util import dt as dt_util
 from . import WeekAquaConfigEntry
 from .const import CMD_ADVANCED_SCHEDULE, CMD_SIMPLE_SCHEDULE, clock_cmd
 from .entity import WeekAquaEntity
+from .texts import t
 
 
 async def async_setup_entry(
@@ -79,4 +80,4 @@ class WeekAquaBackToScheduleButton(WeekAquaEntity, ButtonEntity):
         if sched.override:
             await sched.end_override()
         else:
-            await sched.apply_current(min_transition=60)
+            await sched.apply_current(min_transition=60, source=t("src_back"))

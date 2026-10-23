@@ -101,6 +101,9 @@
       },
       "light_today": {
         "name": "Свет сегодня"
+      },
+      "fade": {
+        "name": "Переход"
       }
     },
     "binary_sensor": {

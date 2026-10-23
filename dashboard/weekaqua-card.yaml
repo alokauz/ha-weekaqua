@@ -90,6 +90,10 @@ cards:
       <ha-alert alert-type="info">{{ 'Maintenance' if mode_m else 'Photo' }} mode until {{ as_timestamp(state_attr(sw, 'ends_at')) | timestamp_custom('%H:%M') }}, then back to the schedule.</ha-alert>
       {% endif %}
       **Now:** {{ states('sensor.' ~ p ~ '_current_step') }}
+      {%- if state_attr('sensor.' ~ p ~ '_fade', 'active') %}
+
+      **Fading:** {{ states('sensor.' ~ p ~ '_fade') }} ({{ state_attr('sensor.' ~ p ~ '_fade', 'progress') }})
+      {%- endif %}
 
       **Channels** ({{ state_attr('sensor.' ~ p ~ '_step_channels', 'applies') or '–' }}): {{ states('sensor.' ~ p ~ '_step_channels') }} · power {{ state_attr('sensor.' ~ p ~ '_step_channels', 'power') or '–' }}
 

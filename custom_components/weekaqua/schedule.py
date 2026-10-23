@@ -280,8 +280,9 @@ class WeekAquaScheduler:
             )
         self._notify()  # the next step has moved on
 
-    async def _run(self, step: dict[str, Any], transition: float) -> None:
+    async def _run(self, step: dict[str, Any], transition: float, source: str | None = None) -> None:
         """Run a step; if the light can't be reached, keep retrying for a while."""
+        source = source or t("src_schedule", time=step["time"])
         self._generation += 1
         generation = self._generation
         loop = asyncio.get_running_loop()
@@ -290,7 +291,7 @@ class WeekAquaScheduler:
         for attempt in range(RETRY_FOR // RETRY_INTERVAL + 1):
             elapsed = loop.time() - started
             try:
-                await self._apply_step(step, max(0.0, transition - elapsed))
+                await self._apply_step(step, max(0.0, transition - elapsed), source)
             except HomeAssistantError as err:
                 if attempt == RETRY_FOR // RETRY_INTERVAL:
                     _LOGGER.warning(
@@ -411,11 +412,11 @@ class WeekAquaScheduler:
         uv = base * self.acclimation_uv_factor()
         return (rgb, rgb, rgb, uv)
 
-    async def _apply_step(self, step: dict[str, Any], transition: float) -> None:
+    async def _apply_step(self, step: dict[str, Any], transition: float, source: str | None = None) -> None:
         interval = float(step["smoothness"]) if step.get("smoothness") else None
         curve = step.get("curve") or None
         if step["target"] == OFF_TARGET:
-            await self.device.set_levels((0, 0, 0, 0), transition, interval, curve)
+            await self.device.set_levels((0, 0, 0, 0), transition, interval, curve, source=source)
         elif step["target"] in self.device.presets:
             co2 = self.co2_factor()
             scale = self.channel_scales(step)
@@ -425,7 +426,7 @@ class WeekAquaScheduler:
                     t("co2_fallback_msg", reason=self.co2.ready()[1], time=step["time"],
                       fallback=self.co2.fallback, lead=self.co2.lead)
                 )
-            await self.device.apply_preset(step["target"], transition, scale, interval, curve)
+            await self.device.apply_preset(step["target"], transition, scale, interval, curve, source=source)
         else:
             _LOGGER.warning(
                 "Schedule step at %s uses preset %r, which no longer exists",
@@ -461,7 +462,7 @@ class WeekAquaScheduler:
             return "sunrise"
         return "change"
 
-    async def apply_current(self, min_transition: float = 0) -> None:
+    async def apply_current(self, min_transition: float = 0, source: str | None = None) -> None:
         """Put the light where the schedule says it should be now.
 
         If the last step's fade is still running, continue it for the remaining
@@ -474,7 +475,7 @@ class WeekAquaScheduler:
             return
         remaining = self.run_fade(step) * 60 - (dt_util.now() - when).total_seconds()
         _LOGGER.info("Catching up with the schedule (step at %s)", step["time"])
-        await self._run(step, max(remaining if remaining > 1 else 0.0, min_transition))
+        await self._run(step, max(remaining if remaining > 1 else 0.0, min_transition), source)
 
     # ---- maintenance / photo mode ------------------------------------
 
@@ -503,7 +504,7 @@ class WeekAquaScheduler:
         self.override = None
         _LOGGER.info("%s mode ended, back to the schedule", mode.capitalize())
         self._notify()
-        await self.apply_current(min_transition=60)
+        await self.apply_current(min_transition=60, source=t("src_mode_end"))
 
     @callback
     def _override_expired(self, _now: datetime) -> None:
@@ -534,7 +535,7 @@ class WeekAquaScheduler:
             _LOGGER.info("CO₂ ready again: back to normal brightness")
             self._co2_message(t("co2_ready_msg", reason=self.co2.ready()[1]))
         # Gently, over 5 minutes (or the rest of a running fade)
-        self.hass.async_create_task(self.apply_current(min_transition=300))
+        self.hass.async_create_task(self.apply_current(min_transition=300, source=t("src_co2")))
 
     def _co2_message(self, message: str) -> None:
         from homeassistant.components import persistent_notification

@@ -51,6 +51,7 @@ async def async_setup_entry(
             WeekAquaStepChannels(device),
             WeekAquaLightPlan(device),
             WeekAquaLightToday(device),
+            WeekAquaFade(device),
         ]
     )
 
@@ -520,4 +521,87 @@ class WeekAquaLightToday(WeekAquaEntity, SensorEntity, RestoreEntity):
             "date": dt_util.now().date().isoformat(),
             "planned_until_now": round(planned_until_now(self._device.scheduler), 2),
             "note": t("today_note"),
+        }
+
+
+class WeekAquaFade(WeekAquaEntity, SensorEntity):
+    """The running fade: 'Sunrise to Nature · 23 min left', or 'No fade'."""
+
+    _attr_translation_key = "fade"
+    _attr_icon = "mdi:transition"
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "fade")
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._device.add_listener(self.async_write_ha_state))
+        # Time left and progress change by themselves
+        self.async_on_remove(async_track_time_interval(self.hass, self._tick, timedelta(seconds=30)))
+
+    @callback
+    def _tick(self, _now) -> None:
+        if self._device.fade_info is not None:
+            self.async_write_ha_state()
+
+    def _label(self, levels) -> str:
+        if not any(levels):
+            return t("off")
+        return self._device.preset_for(levels) or t("fade_custom")
+
+    def _kind(self, info) -> str:
+        if not any(info["to"]):
+            return t("fade_sunset")
+        if not any(info["from"]):
+            return t("fade_sunrise")
+        return t("fade_change")
+
+    @property
+    def native_value(self) -> str:
+        info = self._device.fade_info
+        if info is None or not self._device.fading:
+            return t("fade_none")
+        left = max(0.0, info["duration"] - (dt_util.utcnow() - info["began"]).total_seconds())
+        from .acclimation import describe_minutes
+
+        left_text = describe_minutes(left / 60) if left >= 60 else t("fade_under_minute")
+        if not any(info["to"]):
+            return t("fade_state_off", kind=self._kind(info), left=left_text)
+        return t("fade_state", kind=self._kind(info), target=self._label(info["to"]), left=left_text)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        from .device import describe_levels
+
+        info = self._device.fade_info
+        if info is None or not self._device.fading:
+            last = self._device.last_fade
+            if not last:
+                return {"active": False}
+            return {
+                "active": False,
+                "last_fade": t(
+                    "fade_last",
+                    target=self._label(last["to"]),
+                    source=last["source"],
+                    ended=f"{dt_util.as_local(last['ended']):%H:%M}",
+                    how=t("fade_completed") if last["completed"] else t("fade_interrupted"),
+                ),
+            }
+        elapsed = (dt_util.utcnow() - info["began"]).total_seconds()
+        smooth = {0.5: "smooth_fine", 10.0: "smooth_medium", 30.0: "smooth_coarse", 60.0: "smooth_very_coarse"}
+        steps = max(1, int(info["duration"] / max(0.5, info["interval"])))
+        return {
+            "active": True,
+            "from": describe_levels(info["from"]),
+            "to": describe_levels(info["to"]),
+            "target": self._label(info["to"]),
+            "started": dt_util.as_local(info["began"]).isoformat(),
+            "ends": dt_util.as_local(info["began"] + timedelta(seconds=info["duration"])).isoformat(),
+            "duration_minutes": round(info["duration"] / 60, 1),
+            "progress": f"{min(100, round(elapsed / info['duration'] * 100))}%",
+            "curve": t("curve_perceptual" if info["curve"] == "perceptual" else "curve_linear"),
+            "smoothness": t(smooth.get(float(info["interval"]), "smooth_medium")),
+            "step_every_seconds": round(info["duration"] / steps, 1),
+            "source": info["source"],
         }

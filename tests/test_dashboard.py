@@ -163,3 +163,29 @@ async def test_russian_card(hass, client, freezer):
         assert await hass.config_entries.async_unload(entry.entry_id)
     finally:
         set_language("en")
+
+
+async def test_summary_while_fading(hass, client, freezer):
+    import asyncio
+    from unittest.mock import patch
+    entry = await _setup(hass, freezer)
+    gate = asyncio.Event()
+    quick = asyncio.sleep
+    async def slow(delay):
+        if delay > 1:
+            await gate.wait()
+        else:
+            await quick(delay)
+    with patch("custom_components.weekaqua.device.asyncio.sleep", slow):
+        await hass.services.async_call("light", "turn_on", {"entity_id": "light.b3_0_l600pro_71", "effect": "White", "transition": 1200}, blocking=True)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        text = Template(_markdown(_card()), hass).async_render(parse_result=False)
+        print(text.split("**Channels**")[0])
+        assert "**Fading:** Sunrise to White · 20 min left (0%)" in text   # the light was off
+        assert not any(line.startswith("    ") for line in text.splitlines())
+        gate.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    text = Template(_markdown(_card()), hass).async_render(parse_result=False)
+    assert "**Fading:**" not in text
+    assert await hass.config_entries.async_unload(entry.entry_id)

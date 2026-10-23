@@ -90,6 +90,10 @@ cards:
       <ha-alert alert-type="info">Режим {{ 'обслуживания' if mode_m else 'фото' }} до {{ as_timestamp(state_attr(sw, 'ends_at')) | timestamp_custom('%H:%M') }}, затем возврат к расписанию.</ha-alert>
       {% endif %}
       **Сейчас:** {{ states('sensor.' ~ p ~ '_current_step') }}
+      {%- if state_attr('sensor.' ~ p ~ '_fade', 'active') %}
+
+      **Переход:** {{ states('sensor.' ~ p ~ '_fade') }} ({{ state_attr('sensor.' ~ p ~ '_fade', 'progress') }})
+      {%- endif %}
 
       **Каналы** ({{ state_attr('sensor.' ~ p ~ '_step_channels', 'applies') or '–' }}): {{ states('sensor.' ~ p ~ '_step_channels') }} · мощность {{ state_attr('sensor.' ~ p ~ '_step_channels', 'power') or '–' }}
 

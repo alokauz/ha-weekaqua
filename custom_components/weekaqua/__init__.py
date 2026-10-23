@@ -24,7 +24,7 @@ from .acclimation import Acclimation
 from .co2 import CO2Interlock
 from .co2_control import CO2Control
 from .device import WeekAquaDevice
-from .texts import set_language
+from .texts import set_language, t
 from .schedule import WeekAquaScheduler
 
 PLATFORMS = [
@@ -87,7 +87,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: WeekAquaConfigEntry) -> 
         # preset doesn't undo a manual change.
         async def _catch_up(_hass: HomeAssistant) -> None:
             await device.co2_control.catch_up()
-            await device.scheduler.apply_current()
+            await device.scheduler.apply_current(source=t("src_catchup"))
 
         entry.async_on_unload(async_at_started(hass, _catch_up))
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
