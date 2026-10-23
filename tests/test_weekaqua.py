@@ -1647,3 +1647,51 @@ async def test_russian(hass, client, freezer):
         assert await hass.config_entries.async_unload(entry.entry_id)
     finally:
         set_language("en")
+
+
+async def test_back_to_schedule_after_manual_change(hass, client, freezer):
+    """Picking a preset during a sunrise stops it; Back to schedule continues it for the remaining time."""
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "14:00", "target": "Nature", "brightness": 100, "fade": 60, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 60, "days": every}]
+    freezer.move_to(datetime(2026, 10, 16, 13, 59, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options={"schedule": steps})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    import asyncio
+    gate = asyncio.Event()
+    quick = asyncio.sleep
+    async def slow(delay):          # freeze the fade's long waits so it's "running"
+        if delay > 1:
+            await gate.wait()
+        else:
+            await quick(delay)
+    with patch("custom_components.weekaqua.device.asyncio.sleep", slow):
+        freezer.move_to(datetime(2026, 10, 16, 14, 0, 0, tzinfo=tz)); async_fire_time_changed(hass)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert entry.runtime_data.fading
+        # 14:20: the user tries another preset -> the sunrise stops, White stays
+        freezer.move_to(datetime(2026, 10, 16, 14, 20, 0, tzinfo=tz))
+        await hass.services.async_call("select", "select_option", {"entity_id": "select.b3_0_l600pro_71_preset", "option": "White"}, blocking=True)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert not entry.runtime_data.fading
+        assert sent(client)[-1] == "FBF97EEB69005555"
+        # Back to schedule: the sunrise continues towards Nature for the remaining 40 min
+        await hass.services.async_call("button", "press", {"entity_id": "button.b3_0_l600pro_71_back_to_schedule"}, blocking=True)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert entry.runtime_data.fading
+        assert entry.runtime_data.target == (0x77, 0xEB, 0x77, 0)
+        gate.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent(client)[-1] == "FBF977EB77005555"
+    assert await hass.config_entries.async_unload(entry.entry_id)

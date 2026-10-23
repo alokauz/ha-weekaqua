@@ -21,6 +21,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             WeekAquaResendButton(device),
+            WeekAquaBackToScheduleButton(device),
             WeekAquaButton(device, "sync_clock", "mdi:clock-check", None),
             WeekAquaButton(device, "simple_schedule", "mdi:calendar-clock", CMD_SIMPLE_SCHEDULE),
             WeekAquaButton(device, "advanced_schedule", "mdi:calendar-clock-outline", CMD_ADVANCED_SCHEDULE),
@@ -58,3 +59,24 @@ class WeekAquaResendButton(WeekAquaEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self._device.resend()
+
+
+class WeekAquaBackToScheduleButton(WeekAquaEntity, ButtonEntity):
+    """After a manual change: put the light where the schedule says it should be now.
+
+    Continues an interrupted fade for its remaining time, otherwise fades there
+    over a minute. Ends maintenance/photo mode too.
+    """
+
+    _attr_translation_key = "back_to_schedule"
+    _attr_icon = "mdi:calendar-sync"
+
+    def __init__(self, device) -> None:
+        super().__init__(device, "back_to_schedule")
+
+    async def async_press(self) -> None:
+        sched = self._device.scheduler
+        if sched.override:
+            await sched.end_override()
+        else:
+            await sched.apply_current(min_transition=60)

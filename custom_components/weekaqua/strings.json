@@ -47,6 +47,9 @@
       },
       "resend": {
         "name": "Re-send current state"
+      },
+      "back_to_schedule": {
+        "name": "Back to schedule"
       }
     },
     "select": {

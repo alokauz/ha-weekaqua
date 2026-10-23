@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0b3
+
+- **Back to schedule** button: after a manual change (e.g. picking a preset during a sunrise, which stops the fade), puts the light where the schedule says it should be now — continuing an interrupted fade for its remaining time, otherwise fading there over a minute. Also ends maintenance/photo mode. On both dashboard cards.
+
 ## 0.11.0b2
 
 - **Russian is complete**: besides menus and forms, all list choices (when, curve, smoothness, days, acclimation actions, …) and everything the integration writes itself — sensor values (e.g. `14:00 · Вкл · Nature 60%`), acclimation plans and dates, CO₂ reasons, notifications and error messages — follow Home Assistant's language (Settings → System → General → Language). Log lines stay English for bug reports.

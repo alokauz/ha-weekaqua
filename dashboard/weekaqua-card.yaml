@@ -23,7 +23,7 @@ cards:
       - type: select-options
 
   - type: grid
-    columns: 5
+    columns: 3
     square: false
     cards:
       - type: tile
@@ -50,6 +50,16 @@ cards:
         vertical: true
         tap_action:
           action: toggle
+      - type: tile
+        entity: button.b3_0_l600pro_71_back_to_schedule
+        name: Schedule ↺
+        icon: mdi:calendar-sync
+        vertical: true
+        tap_action:
+          action: perform-action
+          perform_action: button.press
+          target:
+            entity_id: button.b3_0_l600pro_71_back_to_schedule
       - type: tile
         entity: button.b3_0_l600pro_71_re_send_current_state
         name: Re-send

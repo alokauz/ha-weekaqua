@@ -86,7 +86,7 @@ Under **Configure → Schedule → Add or update a step**, choose when (a fixed 
 - With `info` logging (see Troubleshooting), every step logs what it does: preset and channel values, fan, fade duration, curve, smoothness, number of steps and the time between them.
 - The **Schedule** switch pauses it. Turning it back on puts the light where the schedule should be right now (continuing a fade in progress).
 - After a Home Assistant restart the light is also brought back in line with the schedule.
-- Manual changes stay until the next step runs.
+- Manual changes (sliders, presets, the light) stop a running fade and stay until the next step runs. **Back to schedule** returns to the schedule right away, continuing an interrupted fade.
 - If the light can't be reached when a step runs (e.g. the phone app is connected), the step is retried every 30 s for up to 10 minutes. Every step is written to the log.
 - For steps tied to the real sunrise/sunset, use automations (below).
 
