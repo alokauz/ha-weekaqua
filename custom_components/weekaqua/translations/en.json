@@ -233,13 +233,16 @@
           "shorten": "Light period shorter at the start",
           "shorten_step": "Light period step",
           "action": "What to do",
-          "uv_holdback": "Hold back UV"
+          "uv_holdback": "Hold back UV",
+          "shift_days": "Move by (days)"
         },
         "data_description": {
           "start_brightness": "Of your schedule's brightness (100 % = normal).",
           "shorten": "Off steps run this much earlier at the start (0 = keep the normal light period).",
           "shorten_step": "How much longer the light period gets at each step.",
-          "uv_holdback": "UV starts lower and catches up: it follows the square of the brightness (60 % → UV 36 %, 80 % → UV 64 %) and reaches normal together with everything else."
+          "uv_holdback": "UV starts lower and catches up: it follows the square of the brightness (60 % → UV 36 %, 80 % → UV 64 %) and reaches normal together with everything else.",
+          "shift_days": "With the action \"Move the program\": + skips ahead (faster), − goes back (slower). Never before day 1; past the end it finishes at your normal schedule.",
+          "interval_days": "Changing this while the program runs keeps the current stage; only the stages from here on get longer or shorter."
         }
       },
       "power_over": {
@@ -372,7 +375,8 @@
         "save": "Save settings only",
         "start": "Start (or restart) from the beginning now",
         "back": "Go back one step (e.g. algae appeared), and stay there a full interval",
-        "stop": "Stop: back to the normal schedule now"
+        "stop": "Stop: back to the normal schedule now",
+        "shift": "Move the program by the days below (+ forward, − back)"
       }
     },
     "fade_smoothness": {

@@ -99,6 +99,7 @@ For a new tank, new plants or new livestock, **Configure → Acclimation** bring
 - **Brightness** starts at a share of your schedule's brightness (e.g. 60 %) and rises by a step (e.g. 10 %) at each interval (e.g. 7 days).
 - **Light period** starts shorter (Off steps run e.g. 2 h earlier, never before the previous step's fade has ended) and gets longer by a step (e.g. 30 min) at each interval.
 - **Hold back UV** (optional): UV starts lower and catches up, following the square of the brightness (60 % → UV 36 %), and reaches normal with everything else.
+- **Faster or slower**: *Move by (days)* with the action *Move the program* skips ahead (+) or goes back (−); changing *Step every* on a running program keeps the current stage and only changes the stages from here on.
 - **Configure → Acclimation** shows the plan date by date. **Go back one step** (e.g. if algae appear) repeats the previous stage for a full interval.
 - It stops at your normal schedule and **finishes by itself**, so it can't run away if you forget about it.
 - You get a **notification** at every step. The **Acclimation** sensor shows the current level, the next step and the end date. The **Acclimation** switch pauses it (the level is held and the days don't count) and resumes it.

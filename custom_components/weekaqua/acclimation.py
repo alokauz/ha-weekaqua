@@ -277,6 +277,55 @@ class Acclimation:
         )
         self._notify()
 
+    async def async_shift(self, days: int) -> None:
+        """Move the program forward (+) or back (−) by days, e.g. to speed it up.
+
+        Never before day 1; past the end it finishes at the normal schedule.
+        """
+        if not self.running or not days:
+            return
+        current = self.days()
+        target = max(0, current + int(days))
+        # Count the difference as (negative) pause time: dates move with it
+        self.state["paused_days"] += current - target
+        self.state["stage_notified"] = self.stage()
+        await self._save()
+        if self.stage() >= self.total_stages():
+            await self.async_check()  # finishes and tells the user
+            return
+        brightness, shorter = self.values(self.stage())
+        self._message(
+            t("acc_shift_title"),
+            t(
+                "acc_shift",
+                days=f"{int(days):+d}",
+                brightness=f"{brightness:g}",
+                period=t("acc_step_shorter", minutes=describe_minutes(shorter)) if shorter else "",
+                next=format_date(self.next_change()) if self.next_change() else "–",
+                end=format_date(self.ends(), year=True),
+            ),
+        )
+        self._notify()
+
+    def keep_stage_with(self, settings: dict[str, Any]) -> None:
+        """New settings for a running program: keep the current stage.
+
+        Only the length of the stages from here on changes (e.g. a longer
+        interval to slow it down); days already spent in this stage count.
+        """
+        if not self.running:
+            self.settings = {**self.settings, **settings}
+            return
+        stage = self.stage()
+        in_stage = self.days() - stage * int(self.settings["interval_days"])
+        self.settings = {**self.settings, **settings}
+        new_interval = int(self.settings["interval_days"])
+        target = min(stage, self.total_stages()) * new_interval + min(in_stage, new_interval - 1)
+        self.state["paused_days"] += self.days() - target
+
+    async def async_save_state(self) -> None:
+        await self._save()
+
     async def async_pause(self) -> None:
         if self.running and not self.paused:
             self.state["paused_since"] = self._today().isoformat()

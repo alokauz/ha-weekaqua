@@ -2,6 +2,11 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0b5
+
+- **Acclimation: move the program by days** (Configure → Acclimation → *Move by (days)* with the action *Move the program*): + skips ahead to speed it up, − goes back to slow it down. Never before day 1; moving past the end finishes it at the normal schedule. You get a notification with the new dates.
+- **Changing the interval of a running program** (e.g. 7 → 14 days to slow it down) keeps the current stage; only the stages from here on get longer or shorter.
+
 ## 0.11.0b4
 
 - **Fade** sensor: shows the running fade, e.g. `Sunrise to Nature · 23 min left`, with its start and end channel values, start and end times, duration, progress, curve, smoothness, time between steps and what started it (a schedule step, Back to schedule, the light/an automation, CO₂ interlock, a mode ending, acclimation, catch-up after a restart). When no fade runs: `No fade`, with a note about the last fade (completed or interrupted, and when).

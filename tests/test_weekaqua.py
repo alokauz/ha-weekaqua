@@ -1764,3 +1764,57 @@ async def test_fade_sensor(hass, client, freezer):
         gate.set()
     await hass.async_block_till_done(wait_background_tasks=True)
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_acclimation_move_and_slow_down(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "14:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    settings = {"start_brightness": 60, "brightness_step": 10, "interval_days": 7, "shorten": 0, "shorten_step": 0, "uv_holdback": False}
+    freezer.move_to(datetime(2026, 10, 1, 10, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options={"schedule": steps, "acclimation": settings})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await entry.runtime_data.acclimation.async_start()
+    freezer.move_to(datetime(2026, 10, 5, 10, 0, 0, tzinfo=tz))             # day 5 of stage 1 (60 %)
+
+    async def configure(action, **extra):
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "acclimation"})
+        await hass.config_entries.options.async_configure(flow["flow_id"], {**settings, "shift_days": 0, **extra, "action": action})
+        await hass.async_block_till_done(wait_background_tasks=True)
+        return entry.runtime_data.acclimation
+
+    acc = entry.runtime_data.acclimation
+    assert acc.summary() == "60%" and acc.next_change().isoformat() == "2026-10-08"
+
+    # +5 days: into stage 2 (70 %) now, and the whole plan is 5 days earlier
+    acc = await configure("shift", shift_days=5)
+    assert acc.summary() == "70%" and acc.next_change().isoformat() == "2026-10-10" and acc.ends().isoformat() == "2026-10-24"
+    # −3 days: back into stage 1
+    acc = await configure("shift", shift_days=-3)
+    assert acc.summary() == "60%" and acc.next_change().isoformat() == "2026-10-06"
+    # −30 days: never before day 1
+    acc = await configure("shift", shift_days=-30)
+    assert acc.days() == 0 and acc.summary() == "60%"
+
+    # Slow down: 7 → 14 days per stage while running keeps the current stage
+    freezer.move_to(datetime(2026, 10, 15, 10, 0, 0, tzinfo=tz))            # now stage 2 (70 %), 3 days into it
+    await acc.async_check()
+    assert acc.summary() == "70%"
+    acc = await configure("save", interval_days=14)
+    assert acc.summary() == "70%"                                            # same stage
+    assert acc.next_change().isoformat() == "2026-10-26"                    # 14-day stage, 3 days already done
+    assert acc.ends().isoformat() == "2026-11-23"
+
+    # Past the end: finishes at the normal schedule
+    acc = await configure("shift", interval_days=14, shift_days=60)
+    assert acc.summary() == "Finished"
+    assert entry.runtime_data.scheduler.step_levels(steps[0]) == (0x77, 0xEB, 0x77, 0)
+    assert await hass.config_entries.async_unload(entry.entry_id)

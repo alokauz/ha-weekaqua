@@ -354,7 +354,14 @@ class WeekAquaOptionsFlow(OptionsFlow):
             elif action == "start" and settings["start_brightness"] >= 100 and settings["shorten"] <= 0:
                 errors["base"] = "nothing_to_do"
             if not errors:
-                if action == "start":
+                if action != "start":
+                    # A running program keeps its current stage with new settings
+                    acc.keep_stage_with(settings)
+                    await acc.async_save_state()
+                if action == "shift":
+                    await acc.async_shift(int(user_input.get("shift_days", 0)))
+                    await device.scheduler.apply_current(min_transition=300, source=t("src_acclimation"))
+                elif action == "start":
                     acc.settings = {**acc.settings, **settings}
                     await acc.async_start()
                     await device.scheduler.apply_current(source=t("src_acclimation"))
@@ -373,6 +380,8 @@ class WeekAquaOptionsFlow(OptionsFlow):
             )
         actions = [SelectOptionDict(value="save", label="Save settings only")]
         actions.append(SelectOptionDict(value="start", label="Start (or restart) from the beginning now"))
+        if acc.running:
+            actions.append(SelectOptionDict(value="shift", label="Move the program by the days below (+ forward, − back)"))
         if acc.running and acc.stage() > 0:
             actions.append(SelectOptionDict(value="back", label="Go back one step (e.g. algae appeared), and stay there a full interval"))
         if acc.running:
@@ -385,6 +394,9 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 vol.Required("shorten", default=values["shorten"]): number(480, "min"),
                 vol.Required("shorten_step", default=values["shorten_step"]): number(240, "min"),
                 vol.Required("uv_holdback", default=bool(values.get("uv_holdback", False))): bool,
+                vol.Required("shift_days", default=0): NumberSelector(
+                    NumberSelectorConfig(min=-60, max=60, step=1, unit_of_measurement="days", mode=NumberSelectorMode.BOX)
+                ),
                 vol.Required("action", default="save"): SelectSelector(
                     SelectSelectorConfig(options=actions, mode=SelectSelectorMode.LIST, translation_key="acclimation_action")
                 ),

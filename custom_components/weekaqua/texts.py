@@ -120,6 +120,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "acc_step_shorter": ", light period {minutes} shorter than normal",
         "acc_step_normal_period": ", normal light period",
         "acc_next": ". Next step on {date}",
+        "acc_shift_title": "Acclimation moved",
+        "acc_shift": "Moved {days} days. Now {brightness}% brightness{period}. Next step on {next}; back to normal on {end}.",
         "acc_back_title": "Acclimation went back one step",
         "acc_back": "Now {brightness}% brightness{period}. Next step on {next}; back to normal on {end}.",
         # CO₂ interlock
@@ -264,6 +266,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "acc_step_shorter": ", световой день короче обычного на {minutes}",
         "acc_step_normal_period": ", обычный световой день",
         "acc_next": ". Следующий шаг {date}",
+        "acc_shift_title": "Акклиматизация сдвинута",
+        "acc_shift": "Сдвиг на {days} дн. Теперь яркость {brightness}%{period}. Следующий шаг {next}; обычное расписание с {end}.",
         "acc_back_title": "Акклиматизация: шаг назад",
         "acc_back": "Теперь яркость {brightness}%{period}. Следующий шаг {next}; обычное расписание с {end}.",
         "co2_interlock_off": "блокировка по CO₂ выключена",
