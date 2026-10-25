@@ -189,3 +189,58 @@ async def test_summary_while_fading(hass, client, freezer):
     text = Template(_markdown(_card()), hass).async_render(parse_result=False)
     assert "**Fading:**" not in text
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_summary_finds_entities_by_itself(hass, client, freezer):
+    """The Today summary and links work whatever the entity IDs are called."""
+    from homeassistant.helpers import entity_registry as er
+    entry = await _setup(hass, freezer)
+    probe = Template("{{ (integration_entities('weekaqua') | select('match', 'light[.]') | first | default('light.none'))[6:] }}", hass)
+    assert probe.async_render(parse_result=False) == "b3_0_l600pro_71"
+    # Rename everything (like a user whose light is called "Week Aqua")
+    reg = er.async_get(hass)
+    for e in er.async_entries_for_config_entry(reg, entry.entry_id):
+        domain, obj = e.entity_id.split(".", 1)
+        reg.async_update_entity(e.entity_id, new_entity_id=f"{domain}.{obj.replace('b3_0_l600pro_71', 'week_aqua')}")
+    await hass.async_block_till_done()
+    assert probe.async_render(parse_result=False) == "week_aqua"
+    text = Template(_markdown(_card()), hass).async_render(parse_result=False)
+    assert "**Now:** 14:00 · On · Nature" in text and "unknown" not in text
+    links = Template(_links(_card()), hass).async_render(parse_result=False)
+    assert "/config/devices/device/" in links and "device/None" not in links
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize("name", ["card", "card.ru", "chart", "chart.ru"])
+async def test_generators_print_cards_with_own_ids(hass, client, freezer, name):
+    """make-*.jinja prints the card with whatever the user's entity IDs are."""
+    from homeassistant.helpers import entity_registry as er
+    entry = await _setup(hass, freezer)
+    reg = er.async_get(hass)
+    for e in er.async_entries_for_config_entry(reg, entry.entry_id):
+        domain, obj = e.entity_id.split(".", 1)
+        reg.async_update_entity(e.entity_id, new_entity_id=f"{domain}.{obj.replace('b3_0_l600pro_71', 'week_aqua')}")
+    await hass.async_block_till_done()
+    generator = (CARD.parent / f"make-{name}.jinja").read_text()
+    printed = Template(generator, hass).async_render(parse_result=False)
+    expected = (CARD.parent / f"weekaqua-{name}.yaml").read_text().replace("b3_0_l600pro_71", "week_aqua")
+    assert printed.strip() == expected.strip()
+    card = yaml.safe_load(printed)
+    missing = [e for e in _entities(card) if hass.states.get(e) is None]
+    if "series" in card:
+        missing += [s["entity"] for s in card["series"] if hass.states.get(s["entity"]) is None]
+    assert not missing, missing
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+def test_generators_up_to_date():
+    """Regenerate with tools/make_generators.py after changing a card."""
+    from pathlib import Path
+    import subprocess, sys, shutil, tempfile
+    root = CARD.parent.parent
+    with tempfile.TemporaryDirectory() as tmp:
+        shutil.copytree(root / "dashboard", Path(tmp) / "dashboard")
+        shutil.copytree(root / "tools", Path(tmp) / "tools")
+        subprocess.run([sys.executable, "tools/make_generators.py"], cwd=tmp, check=True, capture_output=True)
+        for f in (Path(tmp) / "dashboard").glob("make-*.jinja"):
+            assert f.read_text() == (root / "dashboard" / f.name).read_text(), f"{f.name} is out of date"

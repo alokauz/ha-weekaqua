@@ -107,7 +107,7 @@ for HA's own time triggers.
 
 ## Dashboard card
 
-`dashboard/weekaqua-card.yaml` is a ready-made card (standard cards only). `tests/test_dashboard.py` checks that every entity it uses exists and renders its **Today** markdown template in HA's template engine. When entities, names or sensor texts change, update the card and run the tests. In the template use `strptime` for date-only attributes (not `as_timestamp`, which shifts dates by the UTC offset) and keep Jinja whitespace control so lines don't run together or indent into code blocks.
+Users install cards via the generators `dashboard/make-*.jinja` (Developer tools → Template prints the card with their entity IDs); regenerate them with `python tools/make_generators.py` after changing a card (a test checks they're up to date). The markdown templates find the entities themselves via `integration_entities('weekaqua')`. `dashboard/weekaqua-card.yaml` is a ready-made card (standard cards only). `tests/test_dashboard.py` checks that every entity it uses exists and renders its **Today** markdown template in HA's template engine. When entities, names or sensor texts change, update the card and run the tests. In the template use `strptime` for date-only attributes (not `as_timestamp`, which shifts dates by the UTC offset) and keep Jinja whitespace control so lines don't run together or indent into code blocks.
 
 ## Backlog
 

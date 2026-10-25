@@ -74,7 +74,7 @@ cards:
   - type: markdown
     title: Сегодня
     content: |
-      {%- set p = 'b3_0_l600pro_71' -%}
+      {%- set p = (integration_entities('weekaqua') | select('match', 'light[.]') | first | default('light.none'))[6:] -%}
       {%- set conn = states('binary_sensor.' ~ p ~ '_connection') -%}
       {%- set co2 = states('binary_sensor.' ~ p ~ '_co2_ready') -%}
       {%- set mode_m = is_state('switch.' ~ p ~ '_maintenance_mode', 'on') -%}
@@ -154,5 +154,5 @@ cards:
 
   - type: markdown
     content: |
-      {%- set dev = device_id('light.b3_0_l600pro_71') -%}
+      {%- set dev = device_id(integration_entities('weekaqua') | select('match', 'light[.]') | first | default('')) -%}
       <ha-icon icon="mdi:cog"></ha-icon> [Настройки (Настроить)](/config/integrations/integration/weekaqua) &nbsp;·&nbsp; <ha-icon icon="mdi:fishbowl-outline"></ha-icon> [Страница устройства](/config/devices/device/{{ dev }})
