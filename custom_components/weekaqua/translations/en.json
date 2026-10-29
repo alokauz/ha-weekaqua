@@ -335,6 +335,68 @@
       "description": "Commands to {name} have been failing since {since}. The schedule keeps retrying, but the light may not be following it.\n\nCheck that the light has power, that the WEEK AQUA phone app isn't connected (the light accepts one connection), and that the Raspberry Pi's Bluetooth is in range.\n\nLast error: {error}\n\nThis notice disappears by itself once a command gets through."
     }
   },
+  "services": {
+    "acclimation_shift": {
+      "name": "Move acclimation",
+      "description": "Moves the running acclimation program forward (+) or back (−) by days, without reloading the integration. Never before day 1; moving past the end finishes it at the normal schedule.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Light",
+          "description": "The Week Aqua light (config entry). Leave empty if you have only one."
+        },
+        "device_id": {
+          "name": "Device",
+          "description": "The Week Aqua light as a device, instead of the config entry."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Days to move: positive = further along (brighter, longer), negative = back."
+        }
+      }
+    },
+    "acclimation_pause": {
+      "name": "Pause acclimation",
+      "description": "Holds the running acclimation program at its current stage until it's resumed.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Light",
+          "description": "The Week Aqua light (config entry). Leave empty if you have only one."
+        },
+        "device_id": {
+          "name": "Device",
+          "description": "The Week Aqua light as a device, instead of the config entry."
+        }
+      }
+    },
+    "acclimation_resume": {
+      "name": "Resume acclimation",
+      "description": "Continues a paused acclimation program. The paused days don't count, so later dates move with them.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Light",
+          "description": "The Week Aqua light (config entry). Leave empty if you have only one."
+        },
+        "device_id": {
+          "name": "Device",
+          "description": "The Week Aqua light as a device, instead of the config entry."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "which_light": {
+      "message": "Choose which Week Aqua light (there is more than one, or none is loaded)."
+    },
+    "unknown_device": {
+      "message": "Device {device_id} isn't a Week Aqua light."
+    },
+    "not_loaded": {
+      "message": "Week Aqua light {entry_id} isn't loaded."
+    },
+    "acclimation_not_running": {
+      "message": "No acclimation program is running. Start one with the Acclimation switch or under Configure → Acclimation."
+    }
+  },
   "selector": {
     "step_when": {
       "options": {

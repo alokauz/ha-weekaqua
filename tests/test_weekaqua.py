@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
 from homeassistant.data_entry_flow import FlowResultType
@@ -1817,4 +1818,102 @@ async def test_acclimation_move_and_slow_down(hass, client, freezer):
     acc = await configure("shift", interval_days=14, shift_days=60)
     assert acc.summary() == "Finished"
     assert entry.runtime_data.scheduler.step_levels(steps[0]) == (0x77, 0xEB, 0x77, 0)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_acclimation_services(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.exceptions import ServiceValidationError
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.util import dt as dt_util
+
+    tz = dt_util.get_default_time_zone()
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "14:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    settings = {"start_brightness": 60, "brightness_step": 10, "interval_days": 7, "shorten": 0, "shorten_step": 0, "uv_holdback": False}
+    freezer.move_to(datetime(2026, 10, 1, 15, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"}, options={"schedule": steps, "acclimation": settings})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    device = entry.runtime_data
+    acc = device.acclimation
+    call = hass.services.async_call
+
+    # Nothing running yet: a clear error, nothing changes
+    with pytest.raises(ServiceValidationError) as err:
+        await call(DOMAIN, "acclimation_shift", {"days": 7}, blocking=True)
+    assert err.value.translation_key == "acclimation_not_running"
+
+    await acc.async_start()
+    await hass.async_block_till_done()
+    assert acc.summary() == "60%"
+
+    # Move +7 days (only one light, so no target needed): next stage, sent to the light, no reload
+    client.write_gatt_char.reset_mock()
+    await call(DOMAIN, "acclimation_shift", {"days": 7}, blocking=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert acc.summary() == "70%"
+    assert entry.runtime_data is device                                        # not reloaded
+    assert bytes.fromhex(sent(client)[-1])[2:6] == bytes(device.scheduler.step_levels(steps[0]))
+    assert device.scheduler.step_levels(steps[0])[1] == round(0xEB * 0.7)
+
+    # Pause / resume by config entry and by device; the paused days don't count
+    await call(DOMAIN, "acclimation_pause", {"config_entry_id": entry.entry_id}, blocking=True)
+    assert acc.paused and hass.states.get("switch.b3_0_l600pro_71_acclimation").state == "off"
+    freezer.move_to(datetime(2026, 10, 11, 15, 0, 0, tzinfo=tz))
+    dev = dr.async_get(hass).async_get_device(connections={(dr.CONNECTION_BLUETOOTH, ADDR)})
+    await call(DOMAIN, "acclimation_resume", {"device_id": dev.id}, blocking=True)
+    assert not acc.paused and hass.states.get("switch.b3_0_l600pro_71_acclimation").state == "on"
+    assert acc.days() == 7 and acc.summary() == "70%"
+    assert acc.next_change().isoformat() == "2026-10-18"                       # 7 + 10 paused days
+
+    # Back is allowed, never before day 1, and the schema limits the days
+    await call(DOMAIN, "acclimation_shift", {"days": -30}, blocking=True)
+    assert acc.days() == 0 and acc.summary() == "60%"
+    with pytest.raises((vol.Invalid, ServiceValidationError)):
+        await call(DOMAIN, "acclimation_shift", {"days": 61}, blocking=True)
+    assert acc.days() == 0
+
+    # Wrong targets
+    with pytest.raises(ServiceValidationError) as err:
+        await call(DOMAIN, "acclimation_pause", {"config_entry_id": "nope"}, blocking=True)
+    assert err.value.translation_key == "not_loaded"
+    with pytest.raises(ServiceValidationError) as err:
+        await call(DOMAIN, "acclimation_pause", {"device_id": "nope"}, blocking=True)
+    assert err.value.translation_key == "unknown_device"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_connection_restores_last_state(hass, client):
+    from homeassistant.core import State
+    from pytest_homeassistant_custom_component.common import mock_restore_cache
+
+    conn = "binary_sensor.b3_0_l600pro_71_connection"
+    # After a restart: the last known result, until the first command
+    mock_restore_cache(hass, [State(conn, "off", {"failed_in_a_row": 3, "failing_since": "2026-10-29T19:00:00+05:00",
+                                                  "last_error": "timeout"})])
+    entry = await setup(hass)
+    st = hass.states.get(conn)
+    assert st.state == "off"
+    assert st.attributes["failed_in_a_row"] == 3 and st.attributes["last_error"] == "timeout"
+
+    # A command gets through: live values take over
+    await hass.services.async_call("light", "turn_on", {"entity_id": "light.b3_0_l600pro_71"}, blocking=True)
+    st = hass.states.get(conn)
+    assert st.state == "on" and st.attributes["failed_in_a_row"] == 0 and st.attributes["last_error"] is None
+
+    # A reload (e.g. after saving Configure) keeps it, instead of "unknown"
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.runtime_data.last_success is None
+    assert hass.states.get(conn).state == "on"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_connection_unknown_without_history(hass, client):
+    entry = await setup(hass)
+    assert hass.states.get("binary_sensor.b3_0_l600pro_71_connection").state == "unknown"
     assert await hass.config_entries.async_unload(entry.entry_id)

@@ -8,9 +8,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.const import STATE_OFF, STATE_ON, EntityCategory
+from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from . import WeekAquaConfigEntry
@@ -26,29 +27,43 @@ async def async_setup_entry(
     async_add_entities([WeekAquaConnection(device), WeekAquaCO2Ready(device)])
 
 
-class WeekAquaConnection(WeekAquaEntity, BinarySensorEntity):
-    """On when the last command reached the light (the light can't confirm it applied it)."""
+class WeekAquaConnection(WeekAquaEntity, BinarySensorEntity, RestoreEntity):
+    """On when the last command reached the light (the light can't confirm it applied it).
+
+    Until the first command after a restart or reload, it keeps showing how the
+    last one went, instead of "unknown".
+    """
 
     _attr_translation_key = "connection"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _ATTRS = ("failed_in_a_row", "failing_since", "last_error")
 
     def __init__(self, device) -> None:
         super().__init__(device, "connection")
+        self._restored: State | None = None
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
+        if (last := await self.async_get_last_state()) is not None and last.state in (STATE_ON, STATE_OFF):
+            self._restored = last
         self.async_on_remove(self._device.add_connection_listener(self.async_write_ha_state))
+
+    def _sent_nothing_yet(self) -> bool:
+        d = self._device
+        return d.last_success is None and not d.failures
 
     @property
     def is_on(self) -> bool | None:
-        d = self._device
-        if d.last_success is None and not d.failures:
-            return None  # nothing sent yet since start
-        return d.failures == 0
+        if self._sent_nothing_yet():
+            # nothing sent yet since start: the last known result, if any
+            return self._restored.state == STATE_ON if self._restored else None
+        return self._device.failures == 0
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if self._sent_nothing_yet() and self._restored:
+            return {k: self._restored.attributes.get(k) for k in self._ATTRS}
         d = self._device
         return {
             "failed_in_a_row": d.failures,

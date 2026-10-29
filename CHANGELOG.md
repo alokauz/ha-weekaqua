@@ -2,6 +2,11 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0b6
+
+- **Acclimation actions** for scripts, automations and dashboard cards: `weekaqua.acclimation_shift` (move the running program by ± days), `weekaqua.acclimation_pause` and `weekaqua.acclimation_resume`. They work immediately, without reloading the integration (unlike Configure → Acclimation). Choose the light by config entry or device, or leave it empty if you have only one.
+- **Connection** sensor keeps its last state after a restart or reload, instead of showing *unknown* until the next command.
+
 ## 0.11.0b5
 
 - **Acclimation: move the program by days** (Configure → Acclimation → *Move by (days)* with the action *Move the program*): + skips ahead to speed it up, − goes back to slow it down. Never before day 1; moving past the end finishes it at the normal schedule. You get a notification with the new dates.

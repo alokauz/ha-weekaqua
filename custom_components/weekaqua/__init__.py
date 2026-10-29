@@ -5,9 +5,12 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, CONF_NAME, Platform
 from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.start import async_at_started
+from homeassistant.helpers.typing import ConfigType
 
 from .const import (
+    DOMAIN,
     CONF_ACCLIMATION,
     CONF_CO2,
     CONF_MODES,
@@ -24,6 +27,7 @@ from .acclimation import Acclimation
 from .co2 import CO2Interlock
 from .co2_control import CO2Control
 from .device import WeekAquaDevice
+from .services import async_setup_services
 from .texts import set_language, t
 from .schedule import WeekAquaScheduler
 
@@ -38,6 +42,14 @@ PLATFORMS = [
 ]
 
 type WeekAquaConfigEntry = ConfigEntry[WeekAquaDevice]
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the actions (acclimation shift/pause/resume)."""
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: WeekAquaConfigEntry) -> bool:

@@ -103,6 +103,7 @@ For a new tank, new plants or new livestock, **Configure → Acclimation** bring
 - **Configure → Acclimation** shows the plan date by date. **Go back one step** (e.g. if algae appear) repeats the previous stage for a full interval.
 - It stops at your normal schedule and **finishes by itself**, so it can't run away if you forget about it.
 - You get a **notification** at every step. The **Acclimation** sensor shows the current level, the next step and the end date. The **Acclimation** switch pauses it (the level is held and the days don't count) and resumes it.
+- **Actions** for scripts, automations and dashboard buttons: `weekaqua.acclimation_shift` (`days`: + forward, − back), `weekaqua.acclimation_pause`, `weekaqua.acclimation_resume`. They take effect at once without reloading the integration. With one Week Aqua light no target is needed; otherwise pass `config_entry_id` or `device_id`.
 
 ## CO₂ interlock
 

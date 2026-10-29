@@ -1,0 +1,42 @@
+acclimation_shift:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: weekaqua
+    device_id:
+      selector:
+        device:
+          integration: weekaqua
+    days:
+      required: true
+      default: 1
+      selector:
+        number:
+          min: -60
+          max: 60
+          step: 1
+          mode: box
+          unit_of_measurement: days
+
+acclimation_pause:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: weekaqua
+    device_id:
+      selector:
+        device:
+          integration: weekaqua
+
+acclimation_resume:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: weekaqua
+    device_id:
+      selector:
+        device:
+          integration: weekaqua
