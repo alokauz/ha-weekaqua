@@ -285,32 +285,48 @@ class WeekAquaAcclimationSensor(WeekAquaEntity, SensorEntity):
         }
 
 
-class WeekAquaLastCommand(WeekAquaEntity, SensorEntity):
-    """When a command last reached the light (diagnostic)."""
+class WeekAquaLastCommand(WeekAquaEntity, SensorEntity, RestoreEntity):
+    """When a command last reached the light (diagnostic).
+
+    After a restart or reload it keeps the last time and the last attempt
+    until there's a newer one; the *_since_start counters start from zero.
+    """
 
     _attr_translation_key = "last_command"
     _attr_icon = "mdi:bluetooth-transfer"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _ATTEMPT_ATTRS = ("last_attempt", "last_attempt_command", "last_attempt_result")
 
     def __init__(self, device) -> None:
         super().__init__(device, "last_command")
+        self._restored_value: datetime | None = None
+        self._restored_attempt: dict[str, Any] = {}
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
+        if (last := await self.async_get_last_state()) is not None:
+            self._restored_value = dt_util.parse_datetime(last.state)
+            self._restored_attempt = {k: last.attributes.get(k) for k in self._ATTEMPT_ATTRS}
         self.async_on_remove(self._device.add_connection_listener(self.async_write_ha_state))
 
     @property
     def native_value(self):
-        return self._device.last_success
+        return self._device.last_success or self._restored_value
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         d = self._device
+        if d.last_attempt is None and self._restored_attempt:
+            attempt = self._restored_attempt
+        else:
+            attempt = {
+                "last_attempt": dt_util.as_local(d.last_attempt).isoformat() if d.last_attempt else None,
+                "last_attempt_command": d.last_attempt_what,
+                "last_attempt_result": None if d.last_attempt_ok is None else (t("delivered") if d.last_attempt_ok else t("failed", error=d.last_error)),
+            }
         return {
-            "last_attempt": dt_util.as_local(d.last_attempt).isoformat() if d.last_attempt else None,
-            "last_attempt_command": d.last_attempt_what,
-            "last_attempt_result": None if d.last_attempt_ok is None else (t("delivered") if d.last_attempt_ok else t("failed", error=d.last_error)),
+            **attempt,
             "delivered_since_start": d.sent_ok,
             "failed_since_start": d.sent_failed,
             "retries_since_start": d.retries,

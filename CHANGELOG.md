@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0b7
+
+- **Last command** sensor keeps the time of the last delivered command and the last attempt after a restart or reload, instead of showing *unknown* until the next command. The *since start* counters still start from zero.
+
 ## 0.11.0b6
 
 - **Acclimation actions** for scripts, automations and dashboard cards: `weekaqua.acclimation_shift` (move the running program by ± days), `weekaqua.acclimation_pause` and `weekaqua.acclimation_resume`. They work immediately, without reloading the integration (unlike Configure → Acclimation). Choose the light by config entry or device, or leave it empty if you have only one.

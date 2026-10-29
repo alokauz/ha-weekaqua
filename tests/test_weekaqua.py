@@ -1913,6 +1913,37 @@ async def test_connection_restores_last_state(hass, client):
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
+async def test_last_command_restores_last_value(hass, client):
+    from homeassistant.core import State
+    from pytest_homeassistant_custom_component.common import mock_restore_cache
+
+    sensor = "sensor.b3_0_l600pro_71_last_command"
+    before = "2026-10-29T15:30:00+00:00"
+    mock_restore_cache(hass, [State(sensor, before, {"last_attempt": "2026-10-29T20:30:00+05:00",
+                                                     "last_attempt_command": "R 0% G 0% B 0% UV 0%",
+                                                     "last_attempt_result": "delivered"})])
+    entry = await setup(hass)
+    st = hass.states.get(sensor)
+    assert st.state == before
+    assert st.attributes["last_attempt"] == "2026-10-29T20:30:00+05:00"
+    assert st.attributes["last_attempt_command"] == "R 0% G 0% B 0% UV 0%"
+    assert st.attributes["delivered_since_start"] == 0                      # counters are per start
+
+    # A new command takes over
+    await hass.services.async_call("light", "turn_on", {"entity_id": "light.b3_0_l600pro_71"}, blocking=True)
+    st = hass.states.get(sensor)
+    assert st.state != before and st.attributes["last_attempt"] != "2026-10-29T20:30:00+05:00"
+    assert st.attributes["delivered_since_start"] == 1
+    latest = st.state
+
+    # A reload keeps it, instead of "unknown"
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    st = hass.states.get(sensor)
+    assert st.state == latest and st.attributes["delivered_since_start"] == 0
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
 async def test_connection_unknown_without_history(hass, client):
     entry = await setup(hass)
     assert hass.states.get("binary_sensor.b3_0_l600pro_71_connection").state == "unknown"
