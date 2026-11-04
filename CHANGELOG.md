@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.12.0b2
+
+- **Week Aqua panel** now also appears in Firefox ("Custom element doesn't exist: weekaqua-panel"): the card loads before the frontend has started, and Firefox's element registry is replaced at that point, which dropped the card. It now defines itself again when that happens.
+
 ## 0.12.0b1
 
 - **Week Aqua panel**, a dashboard card that comes with the integration: add it with **Add card → Week Aqua panel** (`type: custom:weekaqua-panel`), no separate install. It finds its own entities whatever their IDs, redraws only when the light's entities change, and is in English and Russian. Compared with the earlier hand-installed version: a fan slider, the timeline uses the integration's step kinds (works in every language, shows a siesta), "CO₂ plug unavailable" instead of "warming up", notices disappear by themselves, the Schedule tile says that switching it off also stops CO₂, and the acclimation chart uses your real stages.

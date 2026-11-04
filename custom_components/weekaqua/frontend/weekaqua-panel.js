@@ -486,7 +486,26 @@ class WeekAquaPanel extends HTMLElement {
   }
 }
 
-if (!customElements.get("weekaqua-panel")) customElements.define("weekaqua-panel", WeekAquaPanel);
+const TAG = "weekaqua-panel";
+
+// The integration loads this file early, before the frontend has started. In some
+// browsers (Firefox) the frontend then installs a new element registry, which drops
+// elements defined before it: so check for a while and define the card again if so.
+// A new subclass each time, as a constructor can't be defined twice in one registry.
+function defineCard() {
+  try {
+    if (!customElements.get(TAG)) customElements.define(TAG, class extends WeekAquaPanel {});
+  } catch (err) {
+    console.warn("Week Aqua panel:", err);
+  }
+}
+defineCard();
+let defineChecks = 0;
+const defineTimer = setInterval(() => {
+  defineCard();
+  if (++defineChecks >= 120) clearInterval(defineTimer); // 60 s
+}, 500);
+
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === "weekaqua-panel")) {
   window.customCards.push({
