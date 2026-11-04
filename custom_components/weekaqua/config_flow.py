@@ -42,6 +42,7 @@ from .const import (
     CONF_MODES,
     CUSTOM_LEVELS,
     DEFAULT_MODES,
+    DEFAULT_PHOTO_RAMP,
     CONF_FADE_CURVE,
     CONF_FADE_INTERVAL,
     CURVE_LABELS,
@@ -513,6 +514,7 @@ class WeekAquaOptionsFlow(OptionsFlow):
             if self.config_entry.options.get(CONF_POWER_LIMIT, True):
                 levels = list(limit_power(levels))
             saved["photo"]["levels"] = levels
+            saved["photo"]["ramp"] = int(user_input["photo_ramp"])
             return self._save(**{CONF_MODES: saved, CONF_FILTER: user_input.get(CONF_FILTER)})
         presets = [SelectOptionDict(value=n, label=n) for n in device.ordered_presets()]
         fields: dict[Any, Any] = {}
@@ -533,6 +535,9 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 photo_levels = modes[m].get("levels") or device.presets.get(preset) or (0, 0, 0, 0)
                 for key, v in zip(CHANNELS, photo_levels):
                     fields[vol.Required(f"photo_{key}", default=round(v / MAX_LEVEL * 100))] = PERCENT_SLIDER
+                fields[vol.Required("photo_ramp", default=modes[m].get("ramp", DEFAULT_PHOTO_RAMP))] = NumberSelector(
+                    NumberSelectorConfig(min=0, max=600, step=1, unit_of_measurement="s", mode=NumberSelectorMode.BOX)
+                )
             fields[vol.Required(f"{m}_minutes", default=modes[m]["minutes"])] = NumberSelector(
                 NumberSelectorConfig(min=5, max=480, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)
             )

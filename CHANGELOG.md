@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0b9
+
+- **Photo mode ramp**: photo mode now fades into its light over a set time, 20 s by default (Configure → Maintenance and photo modes → *Photo: ramp*, 0 = at once). Going back to the schedule afterwards stays at once.
+
 ## 0.11.0b8
 
 - **Maintenance and photo modes can switch the filter and CO₂ off** (Configure → Maintenance and photo modes: choose the filter's switch, then tick the boxes per mode; CO₂ needs CO₂ control). Turning a mode off by hand or pressing **Back to schedule** switches the filter back on, and CO₂ if it's inside its working hours; photo mode does this whenever it ends. When maintenance mode ends by itself, they stay off until you press Back to schedule, and you get a notification.

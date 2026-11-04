@@ -1010,6 +1010,7 @@ async def test_maintenance_mode(hass, client, freezer):
 
     # Photo mode can be ended early
     await hass.services.async_call("switch", "turn_on", {"entity_id": "switch.b3_0_l600pro_71_photo_mode"}, blocking=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert sent(client)[-1] == "FBF9EB5E94EB5555"                       # Colorful
     await hass.services.async_call("switch", "turn_off", {"entity_id": "switch.b3_0_l600pro_71_photo_mode"}, blocking=True)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -1134,7 +1135,8 @@ async def test_photo_mode_own_levels_and_back_at_once(hass, client, freezer):
 
     client.write_gatt_char.reset_mock()
     await call("switch", "turn_on", {"entity_id": sw}, blocking=True)
-    assert sent(client) == ["FBF9643219005555"]                          # own levels, at once
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent(client)[-1] == "FBF9643219005555" and len(sent(client)) > 1   # own levels, 20 s ramp
     assert [c.data["entity_id"] for c in off_calls] == ["switch.fluval"]
     st = hass.states.get(sw).attributes
     assert st["preset"] is None and st["levels"] == "R 43% G 21% B 11% UV 0%" and st["co2_off"] is False
@@ -1172,18 +1174,19 @@ async def test_modes_form(hass, client):
     # Photo levels start from the photo preset (Colorful = EB 5E 94 EB)
     defaults = {str(k): k.default() for k in flow["data_schema"].schema if hasattr(k, "default") and callable(k.default)}
     assert defaults["photo_red"] == 100 and defaults["photo_green"] == 40
+    assert defaults["photo_ramp"] == 20
     await hass.config_entries.options.async_configure(flow["flow_id"], {
         "filter_entity": "switch.fluval",
         "maintenance_preset": "White", "maintenance_minutes": 45, "maintenance_filter_off": True, "maintenance_co2_off": False,
         "photo_preset": "__custom__", "photo_red": 100, "photo_green": 100, "photo_blue": 100, "photo_uv": 100,
-        "photo_minutes": 20, "photo_filter_off": False, "photo_co2_off": False,
+        "photo_ramp": 45, "photo_minutes": 20, "photo_filter_off": False, "photo_co2_off": False,
     })
     await hass.async_block_till_done()
     options = entry.options
     assert options["filter_entity"] == "switch.fluval"
     assert options["modes"]["maintenance"] == {"preset": "White", "minutes": 45, "filter_off": True, "co2_off": False}
     photo = options["modes"]["photo"]
-    assert photo["preset"] == "__custom__" and photo["minutes"] == 20
+    assert photo["preset"] == "__custom__" and photo["minutes"] == 20 and photo["ramp"] == 45
     from custom_components.weekaqua.const import total_power
     assert total_power(photo["levels"]) <= 100                          # 144 % scaled down to the limit
     assert await hass.config_entries.async_unload(entry.entry_id)

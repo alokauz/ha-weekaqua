@@ -123,7 +123,7 @@ The same screen can also **switch the CO₂ plug** from the light schedule: on a
 
 ## Maintenance and photo modes
 
-The **Maintenance mode** and **Photo mode** switches show a preset for a set time, skipping schedule steps, then go back to the schedule by themselves: maintenance mode fades back over a minute, photo mode goes back at once (in the middle of a sunrise or sunset, straight to where it is now). Choose each mode's light and duration under **Configure → Maintenance and photo modes**; photo mode can also use its own R/G/B/UV levels (*Own levels below*).
+The **Maintenance mode** and **Photo mode** switches show a preset for a set time, skipping schedule steps, then go back to the schedule by themselves: maintenance mode fades back over a minute, photo mode goes back at once (in the middle of a sunrise or sunset, straight to where it is now). Choose each mode's light and duration under **Configure → Maintenance and photo modes**; photo mode can also use its own R/G/B/UV levels (*Own levels below*) and fades into its light over *Photo: ramp* seconds (20 s by default, 0 = at once).
 
 Each mode can also **switch the filter and CO₂ off** (choose the filter's switch or smart plug there too; CO₂ needs CO₂ control under Configure → CO₂):
 

@@ -288,13 +288,15 @@
           "photo_green": "Photo: 2. G",
           "photo_blue": "Photo: 3. B",
           "photo_uv": "Photo: 4. UV",
+          "photo_ramp": "Photo: ramp",
           "photo_minutes": "Photo duration",
           "photo_filter_off": "Photo: switch the filter off",
           "photo_co2_off": "Photo: switch CO₂ off"
         },
         "data_description": {
           "filter_entity": "The smart plug or switch of the filter. Needed for the filter boxes below.",
-          "photo_preset": "A preset, or \"Own levels below\" to use the four sliders. Above 100 % power the levels are scaled down."
+          "photo_preset": "A preset, or \"Own levels below\" to use the four sliders. Above 100 % power the levels are scaled down.",
+          "photo_ramp": "Seconds to fade into the photo light when photo mode starts (0 = at once). Going back to the schedule afterwards is always at once."
         }
       },
       "presets": {

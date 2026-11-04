@@ -17,8 +17,10 @@ CONF_MODES = "modes"
 CUSTOM_LEVELS = "__custom__"
 DEFAULT_MODES = {
     "maintenance": {"preset": "White", "minutes": 60, "filter_off": False, "co2_off": False},
-    "photo": {"preset": "Colorful", "minutes": 30, "filter_off": False, "co2_off": False},
+    "photo": {"preset": "Colorful", "minutes": 30, "filter_off": False, "co2_off": False, "ramp": 20},
 }
+# Seconds photo mode fades into its light (also for options saved before it existed)
+DEFAULT_PHOTO_RAMP = 20
 # Switch (smart plug) of the filter, switched off by the modes if asked
 CONF_FILTER = "filter_entity"
 # "slider" or "box" for the channel and fan controls
