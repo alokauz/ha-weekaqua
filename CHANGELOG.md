@@ -2,6 +2,30 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0
+
+Everything since 0.9.0 (the 0.10.0 and 0.11.0 betas), now as a normal release.
+
+**⚠️ When upgrading from 0.9.0:** Off steps with a fade now **end** at their time (`22:00 · Off · fade 60 min` = fully off at 22:00, the sunset starts at 21:00). Move such Off steps later by their fade time to keep your old timing.
+
+**Schedule and light**
+- Schedule steps at a fixed time or **relative to sunrise/sunset** (e.g. sunset −30 min). **Siesta** (an Off step followed by an On step the same day) is supported.
+- **Back to schedule** button (continues an interrupted fade), **Re-send current state** button.
+- Presets: **edit** (incl. renaming, loading onto the light and saving what the light shows), headroom per channel, and a choice to scale down when over the power limit. The app's *Gorgeous* preset now also stays within the limit.
+- **Maintenance** and **photo modes**: a light for a set time, fading in (20 s by default), then back to the schedule (photo mode at once). They can switch the **filter** and **CO₂** off; when maintenance mode ends by itself they stay off until **Back to schedule**. Photo mode can use its own R/G/B/UV levels.
+
+**Acclimation** for new tanks, plants or livestock: starts dimmer with a shorter light period and steps up to your normal schedule, then finishes by itself. Plan by date, go back one step, move by days, pause, optional UV hold-back, notifications, and actions (`weekaqua.acclimation_shift`, `_pause`, `_resume`) that work without reloading.
+
+**CO₂**
+- **Interlock**: holds the light at a fallback brightness until the CO₂ plug has been on for a lead time.
+- **CO₂ control** (optional): switches the CO₂ plug from the light schedule, with a daily maximum and a watchdog; pauses CO₂ during a siesta by default. Needs a backstop in the plug itself.
+
+**Sensors and diagnostics**
+- **Current / Next / All steps** with icons and CO₂ events, **Step channels**, **Fade**, **Light plan** and **Light today** (full-power hours), **CO₂ ready**, **CO₂ schedule**, **Acclimation**.
+- **Connection** and **Last command** (keep their last state through restarts), a Repairs notice when the light is unreachable, and **Download diagnostics**.
+
+**Other**: a grouped **Configure** menu, a full **Russian** translation (incl. the integration's own texts), an integration icon, and dashboard cards (with generators that fill in your own entity IDs) plus a daily light chart.
+
 ## 0.11.0rc2
 
 - **Siesta support**: a midday pause (an Off step followed by an On step the same day) now works with acclimation, which shortens only the end of the light day and leaves the siesta alone (before, it moved every Off step earlier, making a siesta longer and the light day shorter twice).
