@@ -1,6 +1,10 @@
 {
   "domain": "weekaqua",
   "name": "Week Aqua",
+  "after_dependencies": [
+    "frontend",
+    "http"
+  ],
   "bluetooth": [
     {
       "manufacturer_id": 18007,
@@ -15,10 +19,6 @@
     "@alokauz"
   ],
   "config_flow": true,
-  "after_dependencies": [
-    "frontend",
-    "http"
-  ],
   "dependencies": [
     "bluetooth_adapters"
   ],
