@@ -1392,6 +1392,101 @@ async def test_co2_control_day(hass, client, freezer):
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
+SIESTA = [
+    {"time": "14:00", "target": "Nature", "brightness": 100, "fade": 60, "days": [0, 1, 2, 3, 4, 5, 6]},
+    {"time": "17:30", "target": "__off__", "brightness": 100, "fade": 15, "days": [0, 1, 2, 3, 4, 5, 6]},
+    {"time": "18:30", "target": "Nature", "brightness": 100, "fade": 15, "days": [0, 1, 2, 3, 4, 5, 6]},
+    {"time": "22:00", "target": "__off__", "brightness": 100, "fade": 60, "days": [0, 1, 2, 3, 4, 5, 6]},
+]
+
+
+async def test_siesta_and_acclimation(hass, client, freezer):
+    """Acclimation shortens the light day at its end only, not the siesta."""
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+
+    tz = dt_util.get_default_time_zone()
+    freezer.move_to(datetime(2026, 10, 16, 10, 0, 0, tzinfo=tz))
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": SIESTA, "acclimation": {"start_brightness": 70, "brightness_step": 10, "interval_days": 7,
+                                                      "shorten": 90, "shorten_step": 30, "uv_holdback": False}})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sched = entry.runtime_data.scheduler
+    await entry.runtime_data.acclimation.async_start()
+    siesta_off, evening_off = sched.steps[1], sched.steps[3]
+    assert sched.is_siesta_off(siesta_off) and not sched.is_siesta_off(evening_off)
+    assert sched.effective_time(siesta_off).strftime("%H:%M") == "17:30"      # siesta unchanged
+    assert sched.effective_time(evening_off).strftime("%H:%M") == "20:30"     # 90 min earlier
+    # A siesta on other days only doesn't count for a day without one
+    other = {**SIESTA[2], "days": [5, 6]}
+    sched.steps = [SIESTA[0], {**SIESTA[1], "days": [0, 1, 2, 3, 4]}, other, SIESTA[3]]
+    assert not sched.is_siesta_off(sched.steps[1])
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_co2_control_siesta(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
+
+    tz = dt_util.get_default_time_zone()
+    on_calls = async_mock_service(hass, "homeassistant", "turn_on")
+    off_calls = async_mock_service(hass, "homeassistant", "turn_off")
+    freezer.move_to(datetime(2026, 10, 16, 12, 0, 0, tzinfo=tz))
+    hass.states.async_set("switch.co2_plug", "off")
+    entry = _co2_entry(hass, schedule=SIESTA)                                  # default: CO₂ off in a siesta
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    ctl = entry.runtime_data.co2_control
+    # On 60 min before 14:00, off 60 min before 22:00; paused from the siesta's fade (17:15)
+    # until 30 min before the light comes back (18:30)
+    assert hass.states.get("sensor.b3_0_l600pro_71_co2_schedule").state == "13:00–21:00, off 17:15–18:00 for the siesta (7.2 h)"
+    assert hass.states.get("sensor.b3_0_l600pro_71_co2_schedule").attributes["siesta_pauses"] == ["17:15–18:00"]
+    timeline = hass.states.get("sensor.b3_0_l600pro_71_all_steps").state
+    assert "17:15 · CO₂ off" in timeline and "18:00 · CO₂ on" in timeline
+
+    async def at(h, m):
+        freezer.move_to(datetime(2026, 10, 16, h, m, 0, tzinfo=tz))
+        async_fire_time_changed(hass)
+        await let_loop_run()
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    await at(13, 0); assert len(on_calls) == 1
+    hass.states.async_set("switch.co2_plug", "on"); await let_loop_run()
+    await at(17, 0)
+    nxt = hass.states.get("sensor.b3_0_l600pro_71_next_step").attributes
+    assert nxt["step"].startswith("17:30 · Off") and nxt["also"] == "17:15 · CO₂ off"
+    await at(17, 15); assert len(off_calls) == 1                               # siesta: CO₂ off, no warning
+    hass.states.async_set("switch.co2_plug", "off"); await let_loop_run()
+    assert not ctl.in_window()
+    await at(17, 50)
+    nxt = hass.states.get("sensor.b3_0_l600pro_71_next_step").attributes
+    assert nxt["step"] == "18:00 · CO₂ on (30 min before the light comes back after the siesta)"
+    await at(17, 59); assert len(on_calls) == 1
+    await at(18, 0); assert len(on_calls) == 2                                 # back on 30 min before 18:30
+    hass.states.async_set("switch.co2_plug", "on"); await let_loop_run()
+    await hass.async_block_till_done()
+    # The interlock needs only those 30 min, not its 60 min lead: full light at 18:30
+    ready = hass.states.get("binary_sensor.b3_0_l600pro_71_co2_ready")
+    assert ready.state == "off" and ready.attributes["ready_at"].startswith("2026-10-16T18:30")
+    await at(18, 30)
+    assert hass.states.get("binary_sensor.b3_0_l600pro_71_co2_ready").state == "on"
+    await at(21, 0); assert len(off_calls) == 2                                # evening: CO₂ off
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+    # "Keep CO₂ on during a siesta": one window as before
+    await hass.config_entries.async_remove(entry.entry_id)
+    entry2 = _co2_entry(hass, {"siesta": "keep"}, schedule=SIESTA)
+    assert await hass.config_entries.async_setup(entry2.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.b3_0_l600pro_71_co2_schedule").state == "13:00–21:00 (8 h)"
+    assert entry2.runtime_data.co2_control.pauses() == []
+    assert await hass.config_entries.async_unload(entry2.entry_id)
+
+
 async def test_co2_control_limits(hass, client, freezer):
     from datetime import datetime
     from homeassistant.const import EVENT_HOMEASSISTANT_STARTED

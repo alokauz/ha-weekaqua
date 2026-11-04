@@ -2,6 +2,11 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0rc2
+
+- **Siesta support**: a midday pause (an Off step followed by an On step the same day) now works with acclimation, which shortens only the end of the light day and leaves the siesta alone (before, it moved every Off step earlier, making a siesta longer and the light day shorter twice).
+- **CO₂ during a siesta** (Configure → CO₂): by default CO₂ control switches CO₂ off when the siesta's fade starts and back on 30 min (adjustable) before the light comes back; the interlock then needs only that time, not its full lead. Or keep CO₂ on. The CO₂ schedule sensor, All steps and Next step show the pause.
+
 ## 0.11.0rc1
 
 - **Maintenance mode ramp**: maintenance mode now fades into its light too, 20 s by default (Configure → Maintenance and photo modes → *Maintenance: ramp*, 0 = at once). Going back to the schedule afterwards still fades over a minute.

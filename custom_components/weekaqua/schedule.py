@@ -173,15 +173,26 @@ class WeekAquaScheduler:
         earlier = [s for s in self.steps if step_time(s) < step_time(step)]
         return earlier[-1] if earlier else None
 
+    def is_siesta_off(self, step: dict[str, Any]) -> bool:
+        """An Off step with an On step later on one of its days: a midday pause, not the evening."""
+        if step["target"] != OFF_TARGET:
+            return False
+        days = set(step.get("days", ALL_DAYS))
+        return any(
+            s["target"] != OFF_TARGET and step_time(s) > step_time(step) and days & set(s.get("days", ALL_DAYS))
+            for s in self.steps
+        )
+
     def effective_time(self, step: dict[str, Any]) -> time:
         """The step's time today: when an On step starts, when an Off step is fully off.
 
-        Acclimation moves Off steps earlier, but never so early that the light
-        would be off before the previous step's fade has ended.
+        Acclimation moves the Off step that ends the light day earlier (not a
+        siesta's Off step), but never so early that the light would be off
+        before the previous step's fade has ended.
         """
         normal = step_time(step)
         acc = self.acclimation
-        if acc is None or step["target"] != OFF_TARGET or not acc.shorter_minutes():
+        if acc is None or step["target"] != OFF_TARGET or not acc.shorter_minutes() or self.is_siesta_off(step):
             return normal
         minutes = self._minutes(normal) - acc.shorter_minutes()
         if (prev := self._previous(step)) is not None:

@@ -89,6 +89,7 @@ Under **Configure → Schedule → Add or update a step**, choose when (a fixed 
 - Manual changes (sliders, presets, the light) stop a running fade and stay until the next step runs. **Back to schedule** returns to the schedule right away, continuing an interrupted fade.
 - If the light can't be reached when a step runs (e.g. the phone app is connected), the step is retried every 30 s for up to 10 minutes. Every step is written to the log.
 - For steps tied to the real sunrise/sunset, use automations (below).
+- **Siesta** (a midday pause): add an Off step and a later On step, e.g. Off at 17:30 and On at 18:30, each with a short fade. Acclimation leaves the siesta alone, and CO₂ control pauses CO₂ during it (see CO₂ control). A siesta mainly helps tanks *without* CO₂ injection; in a CO₂-injected tank it isn't needed.
 
 To let the integration (not the light) control timing, set the light's own schedule (app → *Mode* tab) to 00:00–23:59 with no ramp and press **Resume simple schedule** once.
 
@@ -97,7 +98,7 @@ To let the integration (not the light) control timing, set the light's own sched
 For a new tank, new plants or new livestock, **Configure → Acclimation** brings the light up slowly:
 
 - **Brightness** starts at a share of your schedule's brightness (e.g. 60 %) and rises by a step (e.g. 10 %) at each interval (e.g. 7 days).
-- **Light period** starts shorter (Off steps run e.g. 2 h earlier, never before the previous step's fade has ended) and gets longer by a step (e.g. 30 min) at each interval.
+- **Light period** starts shorter (the Off step that ends the day runs e.g. 2 h earlier, never before the previous step's fade has ended; a siesta's Off step isn't moved) and gets longer by a step (e.g. 30 min) at each interval.
 - **Hold back UV** (optional): UV starts lower and catches up, following the square of the brightness (60 % → UV 36 %), and reaches normal with everything else.
 - **Faster or slower**: *Move by (days)* with the action *Move the program* skips ahead (+) or goes back (−); changing *Step every* on a running program keeps the current stage and only changes the stages from here on.
 - **Configure → Acclimation** shows the plan date by date. **Go back one step** (e.g. if algae appear) repeats the previous stage for a full interval.
@@ -118,6 +119,8 @@ The interlock only checks that the plug is on, not how much CO₂ is in the wate
 ### CO₂ control (optional)
 
 The same screen can also **switch the CO₂ plug** from the light schedule: on a set time before the day's first On step, off a set time before the last Off step (the time the light is fully off), never longer than a daily maximum. Every minute, CO₂ is switched off if it's on outside that window, e.g. at night, with the schedule switched off, or turned on by hand. The **CO₂ schedule** sensor shows today's window, and the CO₂ switches also appear in **All steps** and **Next step**.
+
+**Siesta**: plants use no CO₂ in the dark, so CO₂ that keeps flowing during a siesta builds up and can harm fish. By default CO₂ control switches CO₂ **off when the siesta's fade starts** and back on a set time (30 min by default) before the light comes back. Because CO₂ was only paused, the interlock then waits that time instead of its full lead time, so the light comes back at full brightness. *CO₂ during a siesta → Keep CO₂ on* turns this off.
 
 ⚠️ **CO₂ left on without light can kill fish**, and Home Assistant can only switch the plug while it's running. Before enabling CO₂ control, set a **backstop in the plug itself**, e.g. an off-only schedule in the plug's own app shortly after the CO₂ off time (Sonoff/eWeLink: *Schedule*), or auto-off. Also set the plug's power-on state to *Off*. CO₂ isn't switched off when Home Assistant restarts, so CO₂ doesn't drop out (and the interlock doesn't dim the light) after every restart.
 

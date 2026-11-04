@@ -2,7 +2,10 @@
 
 CO₂ goes on `on_before` minutes before the day's first On step starts, and off
 `off_before` minutes before the day's last Off step (the time the light is fully
-off), never longer than `max_hours`. A watchdog checks every minute and switches
+off), never longer than `max_hours`. A siesta (an Off step followed by an On
+step the same day) pauses CO₂ by default: off when the siesta's fade starts,
+back on `siesta_on_before` minutes before the light comes back; with
+`siesta` = "keep" it stays on. A watchdog checks every minute and switches
 CO₂ off whenever it is on outside that window: at night, when the schedule is
 switched off, or after someone turned it on by hand.
 
@@ -32,7 +35,10 @@ from .texts import t
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULTS: dict[str, Any] = {"control": False, "on_before": 60, "off_before": 60, "max_hours": 10}
+DEFAULTS: dict[str, Any] = {
+    "control": False, "on_before": 60, "off_before": 60, "max_hours": 10,
+    "siesta": "off", "siesta_on_before": 30,
+}
 CONTROLLABLE_DOMAINS = ("switch", "input_boolean", "light")
 
 
@@ -56,6 +62,8 @@ class CO2Control:
         self.on_before = int(s["on_before"])
         self.off_before = int(s["off_before"])
         self.max_hours = float(s["max_hours"])
+        self.siesta_off = s["siesta"] != "keep"
+        self.siesta_on_before = int(s["siesta_on_before"])
         self._starting = starting
         self._unsub = None
         self._busy = False
@@ -88,25 +96,62 @@ class CO2Control:
             note = t("ctl_shortened", hours=f"{self.max_hours:g}")
         return on, off, t("ctl_window", on=f"{on:%H:%M}", off=f"{off:%H:%M}", note=note)
 
-    def next_event(self, now: datetime | None = None) -> tuple[datetime, str] | None:
-        """(when, 'on' or 'off') of the next CO₂ switch, today or in the next days."""
+    def pauses(self, day: date | None = None) -> list[tuple[datetime, datetime]]:
+        """Siesta pauses inside the day's window: (CO₂ off, CO₂ back on)."""
+        on, off, _ = self.window(day)
+        if on is None or not self.siesta_off:
+            return []
+        sched = self.scheduler
+        day = day or dt_util.now().date()
+        tz = dt_util.get_default_time_zone()
+        today = sorted(
+            (s for s in sched.steps if day.weekday() in s.get("days", range(7))),
+            key=lambda s: sched.run_window(s)[0],
+        )
+        pauses = []
+        for i, step in enumerate(today):
+            if step["target"] != OFF_TARGET:
+                continue
+            back = next((s for s in today[i + 1:] if s["target"] != OFF_TARGET), None)
+            if back is None:
+                continue  # the evening Off step
+            start = max(on, datetime.combine(day, sched.run_time(step), tzinfo=tz))  # the siesta's fade starts
+            end = min(off, datetime.combine(day, sched.run_time(back), tzinfo=tz)
+                      - timedelta(minutes=self.siesta_on_before))
+            if end > start:
+                pauses.append((start, end))
+        return pauses
+
+    def intervals(self, day: date | None = None) -> list[tuple[datetime, datetime, bool]]:
+        """When CO₂ is on during a day: (on, off, on after a siesta), split by siesta pauses."""
+        on, off, _ = self.window(day)
+        if on is None:
+            return []
+        result, start, after_siesta = [], on, False
+        for pause_start, pause_end in self.pauses(day):
+            result.append((start, pause_start, after_siesta))
+            start, after_siesta = pause_end, True
+        result.append((start, off, after_siesta))
+        return [i for i in result if i[1] > i[0]]
+
+    def next_event(self, now: datetime | None = None) -> tuple[datetime, str, bool] | None:
+        """(when, 'on' or 'off', for a siesta) of the next CO₂ switch, today or in the next days."""
         if not self.enabled:
             return None
         now = now or dt_util.now()
         for offset in range(8):
-            on, off, _ = self.window(now.date() + timedelta(days=offset))
-            if on is None:
-                continue
-            if now < on:
-                return on, "on"
-            if now < off:
-                return off, "off"
+            day = now.date() + timedelta(days=offset)
+            intervals = self.intervals(day)
+            for i, (on, off, after_siesta) in enumerate(intervals):
+                if now < on:
+                    return on, "on", after_siesta
+                if now < off:
+                    return off, "off", i < len(intervals) - 1
         return None
 
     def in_window(self, now: datetime | None = None) -> bool:
         now = now or dt_util.now()
-        on, off, _ = self.window(now.date())
-        return bool(on and on <= now < off)
+        return any(on <= now < off for on, off, _ in self.intervals(now.date()))
 
     def summary(self) -> str:
         if not self.enabled:
@@ -114,7 +159,10 @@ class CO2Control:
         on, off, why = self.window()
         if on is None:
             return t("ctl_off_today", why=why)
-        hours = f"{(off - on).total_seconds() / 3600:.1f}".removesuffix(".0")
+        seconds = sum((b - a).total_seconds() for a, b, _ in self.intervals())
+        hours = f"{seconds / 3600:.1f}".removesuffix(".0")
+        for start, end in self.pauses():
+            why += t("ctl_siesta", start=f"{start:%H:%M}", end=f"{end:%H:%M}")
         return t("ctl_window_hours", window=why, hours=hours)
 
     # ---- running ------------------------------------------------------
@@ -144,11 +192,12 @@ class CO2Control:
         """If CO₂ missed its start (HA wasn't running, control just enabled), switch it on now."""
         if not self.enabled:
             return
-        on, _off, _ = self.window()
+        now = dt_util.now()
+        on = next((a for a, b, _ in self.intervals() if a <= now < b), None)
         state = self._plug()
-        if not on or not self.in_window() or state is None or state.state != STATE_OFF or self._held():
+        if on is None or state is None or state.state != STATE_OFF or self._held():
             return
-        # Respect a manual switch-off during today's window; after an HA start we can't tell.
+        # Respect a manual switch-off during this part of the window; after an HA start we can't tell.
         if self._starting or state.last_changed < on:
             await self._switch(True, "the CO₂ window had already started")
 
@@ -159,22 +208,33 @@ class CO2Control:
         state = self._plug()
         if state is None:
             return
-        on, off, _ = self.window(now.date())
         local = dt_util.as_local(now)
-        if on and on <= local < on + timedelta(minutes=1) and state.state != STATE_ON:
+        intervals = self.intervals(local.date())
+        starting = next((i for i in intervals if i[0] <= local < i[0] + timedelta(minutes=1)), None)
+        if starting and state.state != STATE_ON:
             if self._held():
                 _LOGGER.info("CO₂ window starts, but maintenance/photo mode keeps CO₂ off")
             else:
-                self.hass.async_create_task(self._switch(True, "the CO₂ window starts"))
+                after_siesta = starting[2]
+                self.hass.async_create_task(
+                    self._switch(True, "the siesta ends soon" if after_siesta else "the CO₂ window starts",
+                                 after_siesta=after_siesta)
+                )
         elif state.state == STATE_ON and not self.in_window(local):
-            planned_end = off and off <= local < off + timedelta(minutes=1)
-            reason = "the CO₂ window ends" if planned_end else t("ctl_outside")
-            self.hass.async_create_task(self._switch(False, reason, warn=not planned_end))
+            ending = next((i for i in intervals if i[1] <= local < i[1] + timedelta(minutes=1)), None)
+            if ending and ending is not intervals[-1]:
+                reason = "a siesta starts"
+            else:
+                reason = "the CO₂ window ends" if ending else t("ctl_outside")
+            self.hass.async_create_task(self._switch(False, reason, warn=not ending))
 
-    async def _switch(self, turn_on: bool, reason: str, warn: bool = False) -> None:
+    async def _switch(self, turn_on: bool, reason: str, warn: bool = False, after_siesta: bool = False) -> None:
         self._busy = True
         try:
             _LOGGER.info("CO₂ %s: %s", "on" if turn_on else "off", reason)
+            if after_siesta and self.scheduler.co2 is not None:
+                # CO₂ was only paused: the interlock needs this lead, not the full one
+                self.scheduler.co2.short_lead(self.siesta_on_before)
             await self.hass.services.async_call(
                 "homeassistant", "turn_on" if turn_on else "turn_off",
                 {"entity_id": self.entity_id}, blocking=True,
@@ -212,6 +272,9 @@ class CO2Control:
             "on_before": self.on_before,
             "off_before": self.off_before,
             "max_hours": self.max_hours,
+            "siesta": "off" if self.siesta_off else "keep",
+            "siesta_on_before": self.siesta_on_before,
             "window_today": why,
+            "pauses_today": [f"{a:%H:%M}–{b:%H:%M}" for a, b in self.pauses()] if self.enabled else [],
             "in_window": self.in_window() if self.enabled else None,
         }

@@ -468,6 +468,8 @@ class WeekAquaOptionsFlow(OptionsFlow):
                     "on_before": int(user_input["on_before"]),
                     "off_before": int(user_input["off_before"]),
                     "max_hours": float(user_input["max_hours"]),
+                    "siesta": user_input.get("siesta", "off"),
+                    "siesta_on_before": int(user_input["siesta_on_before"]),
                 }})
             current = {**current, **user_input}
         entity_key = (
@@ -486,6 +488,10 @@ class WeekAquaOptionsFlow(OptionsFlow):
                 vol.Required("on_before", default=current["on_before"]): NumberSelector(NumberSelectorConfig(min=0, max=240, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)),
                 vol.Required("off_before", default=current["off_before"]): NumberSelector(NumberSelectorConfig(min=0, max=240, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)),
                 vol.Required("max_hours", default=current["max_hours"]): NumberSelector(NumberSelectorConfig(min=1, max=16, step=0.5, unit_of_measurement="h", mode=NumberSelectorMode.BOX)),
+                vol.Required("siesta", default=current["siesta"]): SelectSelector(
+                    SelectSelectorConfig(options=["off", "keep"], mode=SelectSelectorMode.LIST, translation_key="co2_siesta")
+                ),
+                vol.Required("siesta_on_before", default=current["siesta_on_before"]): NumberSelector(NumberSelectorConfig(min=0, max=120, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)),
                 vol.Required("backstop", default=bool(current["control"])): bool,
             }),
             errors=errors,

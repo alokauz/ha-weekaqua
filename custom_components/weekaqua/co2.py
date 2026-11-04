@@ -49,6 +49,8 @@ class CO2Interlock:
         self._listeners: list[Callable[[], None]] = []
         self._unsubs: list[Callable[[], None]] = []
         self._timer: Callable[[], None] | None = None
+        # (when, minutes): CO₂ control switched CO₂ back on after a siesta pause
+        self._short_lead: tuple[datetime, int] | None = None
 
     @callback
     def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
@@ -107,9 +109,19 @@ class CO2Interlock:
             return since - timedelta(minutes=self.lead)
         return since
 
+    @callback
+    def short_lead(self, minutes: int) -> None:
+        """CO₂ control is switching CO₂ back on after a siesta pause: this time a shorter lead is enough."""
+        self._short_lead = (dt_util.utcnow(), minutes)
+
+    def _lead_for(self, since: datetime) -> int:
+        if self._short_lead and abs((since - self._short_lead[0]).total_seconds()) <= 120:
+            return min(self.lead, self._short_lead[1])
+        return self.lead
+
     def ready_at(self) -> datetime | None:
         since = self._on_since()
-        return since + timedelta(minutes=self.lead) if since else None
+        return since + timedelta(minutes=self._lead_for(since)) if since else None
 
     def ready(self) -> tuple[bool, str]:
         """(ready, human-readable reason)."""
@@ -126,7 +138,8 @@ class CO2Interlock:
         ready_at = self.ready_at()
         since = dt_util.as_local(self._on_since()).strftime("%H:%M")
         if ready_at > dt_util.utcnow():
-            return False, t("co2_waiting", since=since, ready=f"{dt_util.as_local(ready_at):%H:%M}", lead=self.lead)
+            lead = self._lead_for(self._on_since())
+            return False, t("co2_waiting", since=since, ready=f"{dt_util.as_local(ready_at):%H:%M}", lead=lead)
         return True, t("co2_on_since", since=since)
 
     def factor(self) -> float:

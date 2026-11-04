@@ -265,13 +265,17 @@
           "on_before": "CO₂ on before the first On step",
           "off_before": "CO₂ off before the last Off step",
           "max_hours": "Maximum CO₂ per day",
+          "siesta": "CO₂ during a siesta",
+          "siesta_on_before": "CO₂ back on before the siesta ends",
           "backstop": "The plug has its own off schedule or auto-off as a backstop"
         },
         "data_description": {
           "lead": "How long CO₂ must be on before the light may go to full brightness.",
           "fallback": "Share of the step's brightness while CO₂ isn't ready (0 = keep the light off).",
           "off_before": "Before the time the light is fully off. Plants use little CO₂ while the light fades.",
-          "backstop": "Required for CO₂ control."
+          "backstop": "Required for CO₂ control.",
+          "siesta": "A siesta is an Off step followed by an On step on the same day. Plants use no CO₂ in the dark, so CO₂ that keeps flowing builds up and can harm fish.",
+          "siesta_on_before": "Before the light comes back after a siesta. CO₂ was only paused, so after a siesta the interlock waits this long instead of the full lead time."
         }
       },
       "modes": {
@@ -447,6 +451,12 @@
         "4": "Fri",
         "5": "Sat",
         "6": "Sun"
+      }
+    },
+    "co2_siesta": {
+      "options": {
+        "off": "Switch CO₂ off during a siesta (recommended)",
+        "keep": "Keep CO₂ on during a siesta"
       }
     },
     "acclimation_action": {

@@ -78,6 +78,7 @@ Installed by users through HACS from this repository. Owner: Flint.
 - CO₂ control safety: CO₂ may only be on inside the day's window (watchdog every minute switches it off otherwise, incl. schedule off). It must never be switched off on restart/reload (would cut CO₂ and make the interlock dim the light). The Configure form requires confirming a backstop in the plug itself. With control disabled, nothing CO₂-control-related may run.
 - The power limit applies to everything, app presets included (no exemptions). Single channel sliders refuse changes above the power limit (like the app);
   everything else scales down proportionally. Lowering is always allowed.
+- Siesta = an Off step with an On step later on one of its days (`Scheduler.is_siesta_off`). Acclimation moves only the day's final Off step earlier, never a siesta's. CO₂ control (`siesta` = "off", default) pauses CO₂ from the siesta Off step's run time until `siesta_on_before` min before the next On step (`CO2Control.pauses()`/`intervals()`; `window()` stays the overall day span); switching it back on calls `CO2Interlock.short_lead()` so the interlock needs only that time.
 - Acclimation never goes beyond the normal schedule (brightness ≤ 100 % of each step, Off steps only ever earlier, never before the previous step's fade ends) and always finishes by itself. Keep it that way.
 - Never change entity `unique_id`s (users' entity IDs and automations depend on
   them). Device manufacturer stays "Week Aqua".

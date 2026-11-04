@@ -76,7 +76,7 @@ class WeekAquaNextStep(WeekAquaEntity, SensorEntity):
         step, when = self._scheduler.next_step()
         co2 = self._device.co2_control.next_event() if self._device.co2_control else None
         if co2 and (when is None or co2[0] < when):
-            return ("co2", co2[1], co2[0])
+            return ("co2", co2[1], co2[0], co2[2])
         return ("step", step, when) if step is not None else None
 
     @property
@@ -102,10 +102,16 @@ class WeekAquaNextStep(WeekAquaEntity, SensorEntity):
             control = self._device.co2_control
             what = t("co2_on") if nxt[1] == "on" else t("co2_off")
             when = nxt[2].strftime("%H:%M")
-            detail = (
-                t("co2_on_detail", minutes=control.on_before)
-                if nxt[1] == "on" else t("co2_off_detail", minutes=control.off_before)
-            )
+            if nxt[3]:  # a siesta pause starts or ends
+                detail = (
+                    t("co2_siesta_on_detail", minutes=control.siesta_on_before)
+                    if nxt[1] == "on" else t("co2_siesta_off_detail")
+                )
+            else:
+                detail = (
+                    t("co2_on_detail", minutes=control.on_before)
+                    if nxt[1] == "on" else t("co2_off_detail", minutes=control.off_before)
+                )
             return {"step": f"{when} · {what} ({detail})", "kind": f"co2_{nxt[1]}"}
         step, when = nxt[1], nxt[2]
         attrs = {"step": self._scheduler.describe(step), "kind": self._scheduler.step_kind(step, when)}
@@ -194,8 +200,7 @@ class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
                 timed.append((at, 1, f"{at} · {t('on')} · {step['target']}"))
         control = self._device.co2_control
         if control is not None and control.enabled:
-            on, off, _ = control.window()
-            if on is not None:
+            for on, off, _after_siesta in control.intervals():
                 timed.append((f"{on:%H:%M}", 0, f"{on:%H:%M} · {t('co2_on')}"))
                 timed.append((f"{off:%H:%M}", 2, f"{off:%H:%M} · {t('co2_off')}"))
         summary = " | ".join(text for _, _, text in sorted(timed, key=lambda x: (x[0], x[1])))
@@ -365,6 +370,9 @@ class WeekAquaCO2Schedule(WeekAquaEntity, SensorEntity):
             "on_before_first_on_step_minutes": self._control.on_before,
             "off_before_last_off_step_minutes": self._control.off_before,
             "max_hours": self._control.max_hours,
+            "siesta": "off" if self._control.siesta_off else "keep",
+            "siesta_on_before_minutes": self._control.siesta_on_before,
+            "siesta_pauses": [f"{a:%H:%M}–{b:%H:%M}" for a, b in self._control.pauses()],
             "co2_entity": self._control.entity_id,
         }
 
