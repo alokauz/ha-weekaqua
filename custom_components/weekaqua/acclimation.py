@@ -166,7 +166,7 @@ class Acclimation:
         """How many minutes earlier Off steps run now (0 = normal)."""
         return self.values(self.stage())[1] if self.running else 0.0
 
-    def _date_of_stage(self, stage: int) -> date | None:
+    def date_of_stage(self, stage: int) -> date | None:
         if not self.running:
             return None
         start = date.fromisoformat(self.state["started"])
@@ -178,10 +178,10 @@ class Acclimation:
     def next_change(self) -> date | None:
         if not self.running or self.paused or self.stage() >= self.total_stages():
             return None
-        return self._date_of_stage(self.stage() + 1)
+        return self.date_of_stage(self.stage() + 1)
 
     def ends(self) -> date | None:
-        return self._date_of_stage(self.total_stages())
+        return self.date_of_stage(self.total_stages())
 
     def summary(self) -> str:
         """Short text for the sensor."""

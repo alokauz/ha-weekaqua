@@ -147,6 +147,22 @@ Full-power hours are a *relative* measure for comparing days, schedules and accl
 
 ## Dashboard card
 
+### Week Aqua panel (recommended)
+
+The integration brings its own card, **Week Aqua panel**: the light and its connection, what's next and the day's timeline (with CO₂ and a siesta), the channels of the current step, Schedule / Photo / Maintenance tiles, acclimation progress with a full-power-hours chart and buttons to pause it or move it by days, today's light curve, Back to schedule, diagnostics, and a fold-out section with brightness, preset, channel and fan sliders. English and Russian, following your Home Assistant language.
+
+Nothing to install: after updating the integration (and reloading the browser page), open your dashboard → **Edit dashboard** → **Add card** and search for **Week Aqua panel**, or add it in YAML:
+
+```yaml
+type: custom:weekaqua-panel
+# name: Living room tank   # optional, default: the light's name
+# device_id: ...           # only needed with more than one Week Aqua light
+```
+
+It finds its entities by itself, whatever their entity IDs are. It looks best full width: in a Sections view, set the card's width to full under **Layout**, or put it in a view of type **Panel (single card)**.
+
+### Standard cards
+
 [`dashboard/weekaqua-card.yaml`](dashboard/weekaqua-card.yaml) is a ready-made card using only Home Assistant's standard cards: the light with brightness and preset, the preset picker, Schedule / Maintenance / Photo / Acclimation switches, a **Today** summary (warnings when the light can't be reached, CO₂ isn't ready or a mode is on; what's happening now, the actual channel values, what's next, the day's timeline with CO₂, acclimation progress), a power gauge with a 24-hour graph, the channel sliders, and links to the integration's settings (**Configure**) and the light's device page.
 
 To add it with **your** entity IDs filled in: open **Developer tools → Template**, replace everything in the template editor with the contents of [`dashboard/make-card.jinja`](dashboard/make-card.jinja) (Russian: `make-card.ru.jinja`; chart: `make-chart.jinja` / `make-chart.ru.jinja`), and copy the result shown on the right. Then open your dashboard → ⋮ → **Edit dashboard** → **Add card** → **Manual** and paste it. The *Today* summary and the links find your entities by themselves either way.

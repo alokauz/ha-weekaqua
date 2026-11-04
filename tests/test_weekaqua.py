@@ -1420,6 +1420,15 @@ async def test_siesta_and_acclimation(hass, client, freezer):
     assert sched.is_siesta_off(siesta_off) and not sched.is_siesta_off(evening_off)
     assert sched.effective_time(siesta_off).strftime("%H:%M") == "17:30"      # siesta unchanged
     assert sched.effective_time(evening_off).strftime("%H:%M") == "20:30"     # 90 min earlier
+    await hass.async_block_till_done()
+    attrs = hass.states.get("sensor.b3_0_l600pro_71_acclimation").attributes
+    assert attrs["stage_index"] == 0
+    assert attrs["stages"] == [
+        {"from": "2026-10-16", "brightness": 70, "shorter_minutes": 90},
+        {"from": "2026-10-23", "brightness": 80, "shorter_minutes": 60},
+        {"from": "2026-10-30", "brightness": 90, "shorter_minutes": 30},
+        {"from": "2026-11-06", "brightness": 100, "shorter_minutes": 0},
+    ]
     # A siesta on other days only doesn't count for a day without one
     other = {**SIESTA[2], "days": [5, 6]}
     sched.steps = [SIESTA[0], {**SIESTA[1], "days": [0, 1, 2, 3, 4]}, other, SIESTA[3]]
@@ -1447,6 +1456,10 @@ async def test_co2_control_siesta(hass, client, freezer):
     assert hass.states.get("sensor.b3_0_l600pro_71_co2_schedule").attributes["siesta_pauses"] == ["17:15–18:00"]
     timeline = hass.states.get("sensor.b3_0_l600pro_71_all_steps").state
     assert "17:15 · CO₂ off" in timeline and "18:00 · CO₂ on" in timeline
+    # The same timeline for cards, with each entry's kind
+    kinds = [(e["time"], e["kind"]) for e in hass.states.get("sensor.b3_0_l600pro_71_all_steps").attributes["timeline"]]
+    assert kinds == [("13:00", "co2_on"), ("14:00", "on"), ("17:15", "co2_off"), ("17:30", "siesta"),
+                     ("18:00", "co2_on"), ("18:30", "on"), ("21:00", "co2_off"), ("22:00", "off")]
 
     async def at(h, m):
         freezer.move_to(datetime(2026, 10, 16, h, m, 0, tzinfo=tz))
@@ -2220,3 +2233,32 @@ async def test_connection_unknown_without_history(hass, client):
     entry = await setup(hass)
     assert hass.states.get("binary_sensor.b3_0_l600pro_71_connection").state == "unknown"
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_card_is_served_and_registered(hass):
+    """The dashboard card is served from the integration and loaded in the frontend."""
+    import sys, types
+    from custom_components.weekaqua import CARD_FILE, CARD_URL, _async_register_card
+
+    assert CARD_FILE.is_file()
+    hass.http = MagicMock(async_register_static_paths=AsyncMock())
+    hass.config.components.add("frontend")
+    added = []
+    frontend = types.ModuleType("homeassistant.components.frontend")
+    frontend.add_extra_js_url = lambda _hass, url: added.append(url)
+    with patch.dict(sys.modules, {"homeassistant.components.frontend": frontend}):
+        await _async_register_card(hass)
+    (paths,), _ = hass.http.async_register_static_paths.call_args
+    assert paths[0].url_path == CARD_URL and paths[0].path == str(CARD_FILE)
+    assert len(added) == 1 and added[0].startswith(CARD_URL + "?v=")
+
+
+def test_card_javascript_is_valid():
+    import shutil, subprocess
+    from custom_components.weekaqua import CARD_FILE
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js isn't installed")
+    result = subprocess.run([node, "--check", str(CARD_FILE)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, CONF_NAME, Platform
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.loader import async_get_integration
 
 from .const import (
     DOMAIN,
@@ -46,11 +49,31 @@ type WeekAquaConfigEntry = ConfigEntry[WeekAquaDevice]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
+# The dashboard card (custom:weekaqua-panel), served from this integration
+CARD_URL = "/weekaqua/weekaqua-panel.js"
+CARD_FILE = Path(__file__).parent / "frontend" / "weekaqua-panel.js"
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the actions (acclimation shift/pause/resume)."""
+    """Register the actions (acclimation shift/pause/resume) and the dashboard card."""
     async_setup_services(hass)
+    await _async_register_card(hass)
     return True
+
+
+async def _async_register_card(hass: HomeAssistant) -> None:
+    """Serve the card and load it on every frontend page, so it's in the card picker.
+
+    The version in its URL makes browsers load a new card after an update.
+    """
+    if getattr(hass, "http", None) is None or "frontend" not in hass.config.components:
+        return  # e.g. in tests; the frontend is always there in a real installation
+    from homeassistant.components.frontend import add_extra_js_url
+    from homeassistant.components.http import StaticPathConfig
+
+    version = (await async_get_integration(hass, DOMAIN)).version
+    await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(CARD_FILE), False)])
+    add_extra_js_url(hass, f"{CARD_URL}?v={version}")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: WeekAquaConfigEntry) -> bool:

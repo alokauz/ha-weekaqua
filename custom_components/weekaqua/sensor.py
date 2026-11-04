@@ -181,29 +181,39 @@ class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
         await super().async_added_to_hass()
         self.async_on_remove(self._scheduler.add_listener(self.async_write_ha_state))
 
-    @property
-    def native_value(self) -> str:
-        steps = self._scheduler.steps
-        if not steps:
-            return t("no_steps")
+    def _timeline(self) -> list[dict[str, Any]]:
+        """Today's light steps and CO₂ switches in order: {"time", "kind", "text"}.
+
+        kind: "on", "off", "siesta" (an Off step with an On step later), "co2_on", "co2_off".
+        """
         sched = self._scheduler
         factor = sched.acclimation_factor()
-        # (time, order at the same minute, text): CO₂ on before a light step, CO₂ off after it
+        # (time, order at the same minute, kind, text): CO₂ on before a light step, CO₂ off after it
         timed = []
-        for step in steps:
+        for step in sched.steps:
             at = sched.effective_time(step).strftime("%H:%M")
             if step["target"] == OFF_TARGET:
-                timed.append((at, 1, f"{at} · {t('off')}"))
+                kind = "siesta" if sched.is_siesta_off(step) else "off"
+                timed.append((at, 1, kind, f"{at} · {t('off')}"))
             elif factor < 1:
-                timed.append((at, 1, f"{at} · {t('on')} · {step['target']} {step.get('brightness', 100) * factor:g}%"))
+                timed.append((at, 1, "on", f"{at} · {t('on')} · {step['target']} {step.get('brightness', 100) * factor:g}%"))
             else:
-                timed.append((at, 1, f"{at} · {t('on')} · {step['target']}"))
+                timed.append((at, 1, "on", f"{at} · {t('on')} · {step['target']}"))
         control = self._device.co2_control
         if control is not None and control.enabled:
             for on, off, _after_siesta in control.intervals():
-                timed.append((f"{on:%H:%M}", 0, f"{on:%H:%M} · {t('co2_on')}"))
-                timed.append((f"{off:%H:%M}", 2, f"{off:%H:%M} · {t('co2_off')}"))
-        summary = " | ".join(text for _, _, text in sorted(timed, key=lambda x: (x[0], x[1])))
+                timed.append((f"{on:%H:%M}", 0, "co2_on", f"{on:%H:%M} · {t('co2_on')}"))
+                timed.append((f"{off:%H:%M}", 2, "co2_off", f"{off:%H:%M} · {t('co2_off')}"))
+        return [
+            {"time": at, "kind": kind, "text": text}
+            for at, _, kind, text in sorted(timed, key=lambda x: (x[0], x[1]))
+        ]
+
+    @property
+    def native_value(self) -> str:
+        if not self._scheduler.steps:
+            return t("no_steps")
+        summary = " | ".join(e["text"] for e in self._timeline())
         acc = self._device.acclimation
         if acc is not None and acc.running:
             summary += f" {t('with_acclimation')}"
@@ -211,10 +221,12 @@ class WeekAquaScheduleSteps(WeekAquaEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        attrs = {
+        attrs: dict[str, Any] = {
             f"step_{i + 1}": self._scheduler.describe(step)
             for i, step in enumerate(self._scheduler.steps)
         }
+        # For cards: the same timeline as the state, with each entry's kind
+        attrs["timeline"] = self._timeline()
         control = self._device.co2_control
         if control is not None and control.enabled:
             on, off, why = control.window()
@@ -280,6 +292,16 @@ class WeekAquaAcclimationSensor(WeekAquaEntity, SensorEntity):
             "back_to_normal": ends.isoformat() if ends else None,
             "started": acc.state["started"],
             "paused": acc.paused,
+            # For cards: every stage with the date it starts (moves with pauses), the last one = normal
+            "stage_index": acc.stage(),
+            "stages": [
+                {
+                    "from": acc.date_of_stage(i).isoformat(),
+                    "brightness": acc.values(i)[0],
+                    "shorter_minutes": acc.values(i)[1],
+                }
+                for i in range(acc.total_stages() + 1)
+            ],
             # What each On step uses now, e.g. "15:00 Nature 70%": "R 36% G 70% B 36% UV 0% · power 61%"
             "on_steps": {
                 f"{s['time']} {s['target']} {s.get('brightness', 100) * acc.brightness() / 100:g}%":

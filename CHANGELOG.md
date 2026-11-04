@@ -2,6 +2,12 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.12.0b1
+
+- **Week Aqua panel**, a dashboard card that comes with the integration: add it with **Add card → Week Aqua panel** (`type: custom:weekaqua-panel`), no separate install. It finds its own entities whatever their IDs, redraws only when the light's entities change, and is in English and Russian. Compared with the earlier hand-installed version: a fan slider, the timeline uses the integration's step kinds (works in every language, shows a siesta), "CO₂ plug unavailable" instead of "warming up", notices disappear by themselves, the Schedule tile says that switching it off also stops CO₂, and the acclimation chart uses your real stages.
+- **All steps** has a `timeline` attribute (time, kind, text of each light step and CO₂ switch), and **Acclimation** has `stages` (start date, brightness and how much shorter the light period is, per stage) and `stage_index`, for cards.
+- If you used the hand-installed `custom:week-aqua-panel-v2` card: change the card's type to `custom:weekaqua-panel` and remove its resource (Settings → Dashboards → ⋮ → Resources).
+
 ## 0.11.0
 
 Everything since 0.9.0 (the 0.10.0 and 0.11.0 betas), now as a normal release.
