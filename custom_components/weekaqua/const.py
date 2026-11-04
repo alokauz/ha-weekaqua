@@ -11,12 +11,16 @@ CONF_SCHEDULE = "schedule"
 CONF_ACCLIMATION = "acclimation"
 # CO₂ interlock settings, see co2.py
 CONF_CO2 = "co2"
-# Maintenance / photo mode: preset and minutes for each
+# Maintenance / photo mode: preset (or CUSTOM_LEVELS with raw "levels" for
+# photo mode), minutes, and whether to switch the filter / CO₂ off meanwhile
 CONF_MODES = "modes"
+CUSTOM_LEVELS = "__custom__"
 DEFAULT_MODES = {
-    "maintenance": {"preset": "White", "minutes": 60},
-    "photo": {"preset": "Colorful", "minutes": 30},
+    "maintenance": {"preset": "White", "minutes": 60, "filter_off": False, "co2_off": False},
+    "photo": {"preset": "Colorful", "minutes": 30, "filter_off": False, "co2_off": False},
 }
+# Switch (smart plug) of the filter, switched off by the modes if asked
+CONF_FILTER = "filter_entity"
 # "slider" or "box" for the channel and fan controls
 CONF_INPUT_MODE = "input_mode"
 # Shortest seconds between two fade commands, and the fade curve

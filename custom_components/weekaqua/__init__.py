@@ -13,6 +13,7 @@ from .const import (
     DOMAIN,
     CONF_ACCLIMATION,
     CONF_CO2,
+    CONF_FILTER,
     CONF_MODES,
     DEFAULT_MODES,
     CONF_FADE_CURVE,
@@ -79,6 +80,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: WeekAquaConfigEntry) -> 
     device.scheduler.co2_control = device.co2_control
     # Maintenance / photo mode settings
     device.modes = {**DEFAULT_MODES, **entry.options.get(CONF_MODES, {})}
+    device.filter_entity = entry.options.get(CONF_FILTER)
     entry.runtime_data = device
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     device.scheduler.start()

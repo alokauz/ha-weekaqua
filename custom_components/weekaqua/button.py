@@ -80,4 +80,6 @@ class WeekAquaBackToScheduleButton(WeekAquaEntity, ButtonEntity):
         if sched.override:
             await sched.end_override()
         else:
+            # Filter/CO₂ still off after maintenance mode ended by itself
+            await sched.restore_equipment()
             await sched.apply_current(min_transition=60, source=t("src_back"))

@@ -15,6 +15,8 @@ from functools import partial
 import logging
 from typing import Any
 
+from homeassistant.components import persistent_notification
+from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import (
@@ -128,6 +130,9 @@ class WeekAquaScheduler:
         self.co2_control = None  # set in __init__.py
         # Maintenance / photo mode: {"mode", "preset", "until"} while active
         self.override: dict[str, Any] | None = None
+        # What a mode switched off and hasn't switched back on: {"filter": True, "co2": True}.
+        # Outlives maintenance mode when it ends by itself (until Back to schedule).
+        self.held: dict[str, bool] = {}
         self._override_timer: Callable[[], None] | None = None
         self._co2_factor_applied = 1.0
         self._unsubs: list[Callable[[], None]] = []
@@ -462,11 +467,14 @@ class WeekAquaScheduler:
             return "sunrise"
         return "change"
 
-    async def apply_current(self, min_transition: float = 0, source: str | None = None) -> None:
+    async def apply_current(
+        self, min_transition: float = 0, source: str | None = None, jump: bool = False
+    ) -> None:
         """Put the light where the schedule says it should be now.
 
         If the last step's fade is still running, continue it for the remaining
         time; otherwise go there over `min_transition` seconds (0 = instantly).
+        jump=True first jumps to where a running fade is now, then continues it.
         """
         if not self.enabled or not self.steps or self.override:
             return
@@ -475,6 +483,11 @@ class WeekAquaScheduler:
             return
         remaining = self.run_fade(step) * 60 - (dt_util.now() - when).total_seconds()
         _LOGGER.info("Catching up with the schedule (step at %s)", step["time"])
+        if jump and remaining > 1:
+            from .lightplan import plan_minutes
+
+            now = dt_util.now()
+            await self.device.set_levels(plan_minutes(self)[now.hour * 60 + now.minute], 0, source=source)
         await self._run(step, max(remaining if remaining > 1 else 0.0, min_transition), source)
 
     # ---- maintenance / photo mode ------------------------------------
@@ -484,32 +497,112 @@ class WeekAquaScheduler:
             return None
         return {**self.override, "until": dt_util.as_local(self.override["until"]).isoformat()}
 
-    async def start_override(self, mode: str, preset: str, minutes: float) -> None:
-        """Show `preset` for `minutes`, skipping schedule steps; then back to the schedule."""
+    async def start_override(self, mode: str, settings: dict[str, Any]) -> None:
+        """Show the mode's light for its minutes, skipping schedule steps; then back to the schedule.
+
+        settings: {"preset" (or CUSTOM_LEVELS with "levels"), "minutes", "filter_off", "co2_off"}
+        """
+        from .const import CUSTOM_LEVELS
+
         self._cancel_override_timer()
+        preset, minutes = settings["preset"], settings["minutes"]
         until = dt_util.utcnow() + timedelta(minutes=minutes)
         self.override = {"mode": mode, "preset": preset, "until": until}
         self._override_timer = async_track_point_in_utc_time(self.hass, self._override_expired, until)
         _LOGGER.info("%s mode: %s for %g min", mode.capitalize(), preset, minutes)
         self._notify()
-        if preset in self.device.presets:
+        await self._hold_equipment(settings)
+        if preset == CUSTOM_LEVELS and settings.get("levels"):
+            await self.device.set_levels(tuple(settings["levels"]), 0, source=t(f"src_{mode}"))
+        elif preset in self.device.presets:
             await self.device.apply_preset(preset, 0)
 
-    async def end_override(self) -> None:
-        """Back to the schedule, fading there over a minute."""
+    async def end_override(self, manual: bool = True) -> None:
+        """Back to the schedule: photo mode at once, maintenance mode fading over a minute.
+
+        Equipment the mode switched off comes back on, except when maintenance
+        mode ends by itself (manual=False): then it stays off until Back to
+        schedule is pressed, and the user is told.
+        """
         if not self.override:
             return
         mode = self.override["mode"]
         self._cancel_override_timer()
         self.override = None
-        _LOGGER.info("%s mode ended, back to the schedule", mode.capitalize())
+        _LOGGER.info("%s mode ended (%s), back to the schedule", mode.capitalize(), "manually" if manual else "time up")
         self._notify()
-        await self.apply_current(min_transition=60, source=t("src_mode_end"))
+        if manual or mode == "photo":
+            await self.restore_equipment()
+        elif self.held:
+            self._equipment_message(t("held_after_maintenance", what=self._held_names()))
+        if mode == "photo":
+            await self.apply_current(source=t("src_mode_end"), jump=True)
+        else:
+            await self.apply_current(min_transition=60, source=t("src_mode_end"))
 
     @callback
     def _override_expired(self, _now: datetime) -> None:
         self._override_timer = None
-        self.hass.async_create_task(self.end_override())
+        self.hass.async_create_task(self.end_override(manual=False))
+
+    # ---- filter and CO₂ during a mode ----------------------------------
+
+    async def _hold_equipment(self, settings: dict[str, Any]) -> None:
+        """Switch the filter and/or CO₂ off for the mode, as set under Configure."""
+        if settings.get("filter_off") and self.device.filter_entity and not self.held.get("filter"):
+            state = self.hass.states.get(self.device.filter_entity)
+            if state is not None and state.state == STATE_ON:
+                if await self._switch_equipment(self.device.filter_entity, False, t("filter_word")):
+                    self.held["filter"] = True
+        # CO₂ only with CO₂ control: it knows when CO₂ may be on again. Held even
+        # when it's off now, so the CO₂ window can't switch it on meanwhile.
+        ctl = self.co2_control
+        if settings.get("co2_off") and ctl is not None and ctl.enabled and not self.held.get("co2"):
+            self.held["co2"] = True
+            state = self.hass.states.get(ctl.entity_id)
+            if state is not None and state.state == STATE_ON:
+                await self._switch_equipment(ctl.entity_id, False, "CO₂")
+        self._notify()
+
+    async def restore_equipment(self) -> None:
+        """Filter back on; CO₂ back on if it's inside today's CO₂ window."""
+        held, self.held = self.held, {}
+        if not held:
+            return
+        if held.get("filter") and self.device.filter_entity:
+            await self._switch_equipment(self.device.filter_entity, True, t("filter_word"))
+        ctl = self.co2_control
+        if held.get("co2") and ctl is not None and ctl.enabled and ctl.in_window():
+            await self._switch_equipment(ctl.entity_id, True, "CO₂")
+        persistent_notification.async_dismiss(self.hass, self._equipment_notification_id)
+        self._notify()
+
+    def _held_names(self) -> str:
+        names = [t("filter_word")] if self.held.get("filter") else []
+        return ", ".join(names + (["CO₂"] if self.held.get("co2") else []))
+
+    @property
+    def _equipment_notification_id(self) -> str:
+        return f"weekaqua_equipment_{self.device.address}"
+
+    def _equipment_message(self, message: str) -> None:
+        persistent_notification.async_create(
+            self.hass, message, title=t("equipment_title"), notification_id=self._equipment_notification_id
+        )
+
+    async def _switch_equipment(self, entity_id: str, turn_on: bool, what: str) -> bool:
+        _LOGGER.info("%s %s for maintenance/photo mode", what, "on" if turn_on else "off")
+        try:
+            await self.hass.services.async_call(
+                "homeassistant", "turn_on" if turn_on else "turn_off", {"entity_id": entity_id}, blocking=True
+            )
+        except Exception as err:  # noqa: BLE001 - tell the user instead of failing the mode
+            _LOGGER.error("Couldn't switch %s %s: %s", what, "on" if turn_on else "off", err)
+            self._equipment_message(
+                t("equipment_failed", what=what, action=t("on_word") if turn_on else t("off_word"), error=err)
+            )
+            return False
+        return True
 
     @callback
     def _cancel_override_timer(self) -> None:

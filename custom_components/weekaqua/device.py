@@ -108,6 +108,7 @@ class WeekAquaDevice:
         self.co2 = None  # set in __init__.py
         self.co2_control = None  # set in __init__.py
         self.modes: dict[str, dict] = {}  # set in __init__.py
+        self.filter_entity: str | None = None  # set in __init__.py
         # Fan speed in percent, None until it has been set once.
         self.fan: float | None = None
         # App presets first, then the user's own. Custom presets may also set the fan.

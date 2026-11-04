@@ -2,6 +2,13 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0b8
+
+- **Maintenance and photo modes can switch the filter and CO₂ off** (Configure → Maintenance and photo modes: choose the filter's switch, then tick the boxes per mode; CO₂ needs CO₂ control). Turning a mode off by hand or pressing **Back to schedule** switches the filter back on, and CO₂ if it's inside its working hours; photo mode does this whenever it ends. When maintenance mode ends by itself, they stay off until you press Back to schedule, and you get a notification.
+- **Photo mode can use its own R/G/B/UV levels** (*Own levels below*) instead of a preset.
+- **Photo mode goes back to the schedule at once** when it ends, instead of fading over a minute (during a sunrise or sunset, straight to where it is now, then it continues).
+- The mode switches show `levels`, `filter_off` and `co2_off` as attributes.
+
 ## 0.11.0b7
 
 - **Last command** sensor keeps the time of the last delivered command and the last attempt after a restart or reload, instead of showing *unknown* until the next command. The *since start* counters still start from zero.

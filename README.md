@@ -123,7 +123,15 @@ The same screen can also **switch the CO₂ plug** from the light schedule: on a
 
 ## Maintenance and photo modes
 
-The **Maintenance mode** and **Photo mode** switches show a preset for a set time, skipping schedule steps, then fade back to the schedule by themselves. Choose each mode's preset and duration under **Configure → Maintenance and photo modes**.
+The **Maintenance mode** and **Photo mode** switches show a preset for a set time, skipping schedule steps, then go back to the schedule by themselves: maintenance mode fades back over a minute, photo mode goes back at once (in the middle of a sunrise or sunset, straight to where it is now). Choose each mode's light and duration under **Configure → Maintenance and photo modes**; photo mode can also use its own R/G/B/UV levels (*Own levels below*).
+
+Each mode can also **switch the filter and CO₂ off** (choose the filter's switch or smart plug there too; CO₂ needs CO₂ control under Configure → CO₂):
+
+- Turning a mode off by hand, or pressing **Back to schedule**, switches the filter back on, and CO₂ too if it's inside its working hours.
+- Photo mode always switches them back on when it ends, also by itself.
+- When **maintenance mode ends by itself**, the filter and CO₂ **stay off** (e.g. the filter is still open) and you get a notification. Press **Back to schedule** to switch them back on. Until then, CO₂ control won't switch CO₂ on, not even when the next day's CO₂ hours start.
+- A filter that was already off when the mode started isn't switched on afterwards.
+- After CO₂ comes back on, the CO₂ interlock keeps the light at its fallback brightness for the lead time, as usual.
 
 ## Daily light
 

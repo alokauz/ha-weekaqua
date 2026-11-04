@@ -38,7 +38,9 @@ from .const import (
     CHANNELS,
     CONF_ACCLIMATION,
     CONF_CO2,
+    CONF_FILTER,
     CONF_MODES,
+    CUSTOM_LEVELS,
     DEFAULT_MODES,
     CONF_FADE_CURVE,
     CONF_FADE_INTERVAL,
@@ -495,25 +497,55 @@ class WeekAquaOptionsFlow(OptionsFlow):
     async def async_step_modes(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Preset and duration of the maintenance and photo modes."""
+        """Light and duration of the maintenance and photo modes, and what they switch off."""
         device = self.config_entry.runtime_data
         modes = {**DEFAULT_MODES, **self.config_entry.options.get(CONF_MODES, {})}
         if user_input is not None:
-            return self._save(**{CONF_MODES: {
-                m: {"preset": user_input[f"{m}_preset"], "minutes": int(user_input[f"{m}_minutes"])}
-                for m in ("maintenance", "photo")
-            }})
+            saved: dict[str, Any] = {}
+            for m in ("maintenance", "photo"):
+                saved[m] = {
+                    "preset": user_input[f"{m}_preset"],
+                    "minutes": int(user_input[f"{m}_minutes"]),
+                    "filter_off": bool(user_input.get(f"{m}_filter_off")),
+                    "co2_off": bool(user_input.get(f"{m}_co2_off")),
+                }
+            levels = [round(user_input[f"photo_{key}"] / 100 * MAX_LEVEL) for key in CHANNELS]
+            if self.config_entry.options.get(CONF_POWER_LIMIT, True):
+                levels = list(limit_power(levels))
+            saved["photo"]["levels"] = levels
+            return self._save(**{CONF_MODES: saved, CONF_FILTER: user_input.get(CONF_FILTER)})
         presets = [SelectOptionDict(value=n, label=n) for n in device.ordered_presets()]
         fields: dict[Any, Any] = {}
+        filter_entity = self.config_entry.options.get(CONF_FILTER)
+        fields[
+            vol.Optional(CONF_FILTER, description={"suggested_value": filter_entity})
+            if filter_entity else vol.Optional(CONF_FILTER)
+        ] = EntitySelector(EntitySelectorConfig(domain=["switch", "input_boolean"]))
         for m in ("maintenance", "photo"):
-            preset = modes[m]["preset"] if modes[m]["preset"] in device.presets else device.ordered_presets()[0]
+            options = presets + ([SelectOptionDict(value=CUSTOM_LEVELS, label=t("custom_levels"))] if m == "photo" else [])
+            known = modes[m]["preset"] in device.presets or (m == "photo" and modes[m]["preset"] == CUSTOM_LEVELS)
+            preset = modes[m]["preset"] if known else device.ordered_presets()[0]
             fields[vol.Required(f"{m}_preset", default=preset)] = SelectSelector(
-                SelectSelectorConfig(options=presets, mode=SelectSelectorMode.DROPDOWN)
+                SelectSelectorConfig(options=options, mode=SelectSelectorMode.DROPDOWN)
             )
+            if m == "photo":
+                # Own levels, used when the preset is "Own levels below"; start from the preset's
+                photo_levels = modes[m].get("levels") or device.presets.get(preset) or (0, 0, 0, 0)
+                for key, v in zip(CHANNELS, photo_levels):
+                    fields[vol.Required(f"photo_{key}", default=round(v / MAX_LEVEL * 100))] = PERCENT_SLIDER
             fields[vol.Required(f"{m}_minutes", default=modes[m]["minutes"])] = NumberSelector(
                 NumberSelectorConfig(min=5, max=480, step=5, unit_of_measurement="min", mode=NumberSelectorMode.BOX)
             )
-        return self.async_show_form(step_id="modes", data_schema=vol.Schema(fields))
+            fields[vol.Required(f"{m}_filter_off", default=bool(modes[m].get("filter_off")))] = bool
+            fields[vol.Required(f"{m}_co2_off", default=bool(modes[m].get("co2_off")))] = bool
+        co2_control = device.co2_control
+        return self.async_show_form(
+            step_id="modes",
+            data_schema=vol.Schema(fields),
+            description_placeholders={
+                "co2_note": "" if co2_control is not None and co2_control.enabled else t("modes_co2_needs_control"),
+            },
+        )
 
     async def async_step_fade(
         self, user_input: dict[str, Any] | None = None

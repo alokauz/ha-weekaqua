@@ -136,13 +136,17 @@ class CO2Control:
     def _plug(self):
         return self.hass.states.get(self.entity_id) if self.entity_id else None
 
+    def _held(self) -> bool:
+        """Maintenance/photo mode switched CO₂ off and it isn't back on yet."""
+        return bool(self.scheduler.held.get("co2"))
+
     async def catch_up(self) -> None:
         """If CO₂ missed its start (HA wasn't running, control just enabled), switch it on now."""
         if not self.enabled:
             return
         on, _off, _ = self.window()
         state = self._plug()
-        if not on or not self.in_window() or state is None or state.state != STATE_OFF:
+        if not on or not self.in_window() or state is None or state.state != STATE_OFF or self._held():
             return
         # Respect a manual switch-off during today's window; after an HA start we can't tell.
         if self._starting or state.last_changed < on:
@@ -158,7 +162,10 @@ class CO2Control:
         on, off, _ = self.window(now.date())
         local = dt_util.as_local(now)
         if on and on <= local < on + timedelta(minutes=1) and state.state != STATE_ON:
-            self.hass.async_create_task(self._switch(True, "the CO₂ window starts"))
+            if self._held():
+                _LOGGER.info("CO₂ window starts, but maintenance/photo mode keeps CO₂ off")
+            else:
+                self.hass.async_create_task(self._switch(True, "the CO₂ window starts"))
         elif state.state == STATE_ON and not self.in_window(local):
             planned_end = off and off <= local < off + timedelta(minutes=1)
             reason = "the CO₂ window ends" if planned_end else t("ctl_outside")

@@ -1017,6 +1017,178 @@ async def test_maintenance_mode(hass, client, freezer):
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
+async def test_maintenance_switches_filter_and_co2(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
+
+    tz = dt_util.get_default_time_zone()
+    on_calls = async_mock_service(hass, "homeassistant", "turn_on")
+    off_calls = async_mock_service(hass, "homeassistant", "turn_off")
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "15:00", "target": "Nature", "brightness": 100, "fade": 0, "days": every},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    co2 = {"enabled": True, "entity_id": "switch.co2_plug", "lead": 60, "fallback": 50,
+           "control": True, "on_before": 60, "off_before": 60, "max_hours": 10}   # CO₂ 14:00-20:00
+    modes = {"maintenance": {"preset": "White", "minutes": 60, "filter_off": True, "co2_off": True},
+             "photo": {"preset": "Colorful", "minutes": 30}}
+    freezer.move_to(datetime(2026, 10, 16, 16, 0, 0, tzinfo=tz))
+    hass.states.async_set("switch.fluval", "on")
+    hass.states.async_set("switch.co2_plug", "on")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps, "co2": co2, "modes": modes, "filter_entity": "switch.fluval"})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sched = entry.runtime_data.scheduler
+    sw = "switch.b3_0_l600pro_71_maintenance_mode"
+    call = hass.services.async_call
+
+    async def at(h, m, s=0, day=16):
+        freezer.move_to(datetime(2026, 10, day, h, m, s, tzinfo=tz))
+        async_fire_time_changed(hass)
+        await let_loop_run()
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    def plugs(calls):
+        return [c.data["entity_id"] for c in calls]
+
+    def mirror(entity_id, state):  # the mocked service doesn't change the plug, so do it here
+        hass.states.async_set(entity_id, state)
+
+    # On: filter and CO₂ off
+    await call("switch", "turn_on", {"entity_id": sw}, blocking=True)
+    assert plugs(off_calls) == ["switch.fluval", "switch.co2_plug"]
+    assert hass.states.get(sw).attributes["filter_off"] and hass.states.get(sw).attributes["co2_off"]
+    mirror("switch.fluval", "off"); mirror("switch.co2_plug", "off")
+
+    # Ends by itself after 60 min: light back to the schedule, filter and CO₂ stay off
+    client.write_gatt_char.reset_mock()
+    await at(17, 0, 1)
+    assert hass.states.get(sw).state == "off" and sent(client) != []
+    assert on_calls == [] and sched.held == {"filter": True, "co2": True}
+    # ... even when the next day's CO₂ hours start
+    await at(14, 0, day=17)
+    await entry.runtime_data.co2_control.catch_up()
+    assert on_calls == []
+
+    # Back to schedule brings both back (CO₂ is inside its 14:00-20:00 hours)
+    await at(14, 30, day=17)
+    await call("button", "press", {"entity_id": "button.b3_0_l600pro_71_back_to_schedule"}, blocking=True)
+    assert plugs(on_calls) == ["switch.fluval", "switch.co2_plug"] and sched.held == {}
+    mirror("switch.fluval", "on"); mirror("switch.co2_plug", "on")
+
+    # Turned off by hand: both back at once
+    on_calls.clear(); off_calls.clear()
+    await call("switch", "turn_on", {"entity_id": sw}, blocking=True)
+    mirror("switch.fluval", "off"); mirror("switch.co2_plug", "off")
+    await call("switch", "turn_off", {"entity_id": sw}, blocking=True)
+    assert plugs(on_calls) == ["switch.fluval", "switch.co2_plug"]
+    mirror("switch.fluval", "on"); mirror("switch.co2_plug", "on")
+
+    # Outside the CO₂ hours (after 20:00): CO₂ off already, held off; by hand back -> filter only
+    await at(20, 30, day=17)
+    mirror("switch.co2_plug", "off")
+    on_calls.clear(); off_calls.clear()
+    await call("switch", "turn_on", {"entity_id": sw}, blocking=True)
+    assert plugs(off_calls) == ["switch.fluval"]
+    mirror("switch.fluval", "off")
+    await call("switch", "turn_off", {"entity_id": sw}, blocking=True)
+    assert plugs(on_calls) == ["switch.fluval"]
+
+    # A filter that was already off (e.g. feeding pause) isn't switched on by the mode
+    mirror("switch.fluval", "off")
+    on_calls.clear()
+    await call("switch", "turn_on", {"entity_id": sw}, blocking=True)
+    await call("switch", "turn_off", {"entity_id": sw}, blocking=True)
+    assert on_calls == []
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_photo_mode_own_levels_and_back_at_once(hass, client, freezer):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
+    from custom_components.weekaqua.lightplan import plan_minutes
+
+    tz = dt_util.get_default_time_zone()
+    on_calls = async_mock_service(hass, "homeassistant", "turn_on")
+    off_calls = async_mock_service(hass, "homeassistant", "turn_off")
+    every = [0, 1, 2, 3, 4, 5, 6]
+    steps = [{"time": "15:00", "target": "Nature", "brightness": 100, "fade": 60, "days": every, "curve": "linear"},
+             {"time": "21:00", "target": "__off__", "brightness": 100, "fade": 0, "days": every}]
+    modes = {"maintenance": {"preset": "White", "minutes": 60},
+             "photo": {"preset": "__custom__", "levels": [100, 50, 25, 0], "minutes": 30,
+                       "filter_off": True, "co2_off": True}}             # no CO₂ control: CO₂ box does nothing
+    freezer.move_to(datetime(2026, 10, 16, 15, 30, 0, tzinfo=tz))     # halfway through the sunrise
+    hass.states.async_set("switch.fluval", "on")
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDR, title="B3.0-L600pro-71",
+        data={CONF_ADDRESS: ADDR, CONF_NAME: "B3.0-L600pro-71"},
+        options={"schedule": steps, "modes": modes, "filter_entity": "switch.fluval"})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sw = "switch.b3_0_l600pro_71_photo_mode"
+    call = hass.services.async_call
+
+    client.write_gatt_char.reset_mock()
+    await call("switch", "turn_on", {"entity_id": sw}, blocking=True)
+    assert sent(client) == ["FBF9643219005555"]                          # own levels, at once
+    assert [c.data["entity_id"] for c in off_calls] == ["switch.fluval"]
+    st = hass.states.get(sw).attributes
+    assert st["preset"] is None and st["levels"] == "R 43% G 21% B 11% UV 0%" and st["co2_off"] is False
+    hass.states.async_set("switch.fluval", "off")
+
+    # Turned off at 15:40: at once to where the sunrise is now, then the sunrise continues
+    freezer.move_to(datetime(2026, 10, 16, 15, 40, 0, tzinfo=tz))
+    client.write_gatt_char.reset_mock()
+    await call("switch", "turn_off", {"entity_id": sw}, blocking=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    now_levels = bytes(plan_minutes(entry.runtime_data.scheduler)[15 * 60 + 40])
+    assert bytes.fromhex(sent(client)[0])[2:6] == now_levels
+    assert sent(client)[-1] == "FBF977EB77005555"                       # sunrise continues to Nature
+    assert [c.data["entity_id"] for c in on_calls] == ["switch.fluval"]
+    hass.states.async_set("switch.fluval", "on")
+
+    # Photo mode ending by itself also switches the filter back on (unlike maintenance)
+    on_calls.clear()
+    await call("switch", "turn_on", {"entity_id": sw}, blocking=True)
+    hass.states.async_set("switch.fluval", "off")
+    freezer.move_to(datetime(2026, 10, 16, 16, 10, 1, tzinfo=tz)); async_fire_time_changed(hass)
+    await let_loop_run()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get(sw).state == "off"
+    assert [c.data["entity_id"] for c in on_calls] == ["switch.fluval"]
+    assert sent(client)[-1] == "FBF977EB77005555"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_modes_form(hass, client):
+    entry = await setup(hass)
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "modes"})
+    assert flow["step_id"] == "modes"
+    # Photo levels start from the photo preset (Colorful = EB 5E 94 EB)
+    defaults = {str(k): k.default() for k in flow["data_schema"].schema if hasattr(k, "default") and callable(k.default)}
+    assert defaults["photo_red"] == 100 and defaults["photo_green"] == 40
+    await hass.config_entries.options.async_configure(flow["flow_id"], {
+        "filter_entity": "switch.fluval",
+        "maintenance_preset": "White", "maintenance_minutes": 45, "maintenance_filter_off": True, "maintenance_co2_off": False,
+        "photo_preset": "__custom__", "photo_red": 100, "photo_green": 100, "photo_blue": 100, "photo_uv": 100,
+        "photo_minutes": 20, "photo_filter_off": False, "photo_co2_off": False,
+    })
+    await hass.async_block_till_done()
+    options = entry.options
+    assert options["filter_entity"] == "switch.fluval"
+    assert options["modes"]["maintenance"] == {"preset": "White", "minutes": 45, "filter_off": True, "co2_off": False}
+    photo = options["modes"]["photo"]
+    assert photo["preset"] == "__custom__" and photo["minutes"] == 20
+    from custom_components.weekaqua.const import total_power
+    assert total_power(photo["levels"]) <= 100                          # 144 % scaled down to the limit
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
 async def test_co2_interlock(hass, client, freezer, caplog):
     import logging
     caplog.set_level(logging.INFO, logger="custom_components.weekaqua")

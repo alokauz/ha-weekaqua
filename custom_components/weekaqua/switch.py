@@ -118,15 +118,24 @@ class WeekAquaModeSwitch(WeekAquaEntity, SwitchEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        from .const import CUSTOM_LEVELS
+        from .device import describe_levels
+
         settings = self._device.modes[self._mode]
-        attrs = {"preset": settings["preset"], "minutes": settings["minutes"]}
+        custom = settings["preset"] == CUSTOM_LEVELS and settings.get("levels")
+        attrs = {
+            "preset": None if custom else settings["preset"],
+            "levels": describe_levels(settings["levels"]) if custom else None,
+            "minutes": settings["minutes"],
+            "filter_off": bool(settings.get("filter_off") and self._device.filter_entity),
+            "co2_off": bool(settings.get("co2_off") and self._sched.co2_control and self._sched.co2_control.enabled),
+        }
         if self.is_on:
             attrs["ends_at"] = self._sched.override_info()["until"]
         return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        settings = self._device.modes[self._mode]
-        await self._sched.start_override(self._mode, settings["preset"], settings["minutes"])
+        await self._sched.start_override(self._mode, self._device.modes[self._mode])
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         if self.is_on:
