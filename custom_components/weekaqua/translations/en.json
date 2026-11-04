@@ -280,6 +280,7 @@
         "data": {
           "filter_entity": "Filter switch",
           "maintenance_preset": "Maintenance preset",
+          "maintenance_ramp": "Maintenance: ramp",
           "maintenance_minutes": "Maintenance duration",
           "maintenance_filter_off": "Maintenance: switch the filter off",
           "maintenance_co2_off": "Maintenance: switch CO₂ off",
@@ -295,6 +296,7 @@
         },
         "data_description": {
           "filter_entity": "The smart plug or switch of the filter. Needed for the filter boxes below.",
+          "maintenance_ramp": "Seconds to fade into the maintenance light when maintenance mode starts (0 = at once). Going back to the schedule afterwards fades over a minute.",
           "photo_preset": "A preset, or \"Own levels below\" to use the four sliders. Above 100 % power the levels are scaled down.",
           "photo_ramp": "Seconds to fade into the photo light when photo mode starts (0 = at once). Going back to the schedule afterwards is always at once."
         }

@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.11.0rc1
+
+- **Maintenance mode ramp**: maintenance mode now fades into its light too, 20 s by default (Configure → Maintenance and photo modes → *Maintenance: ramp*, 0 = at once). Going back to the schedule afterwards still fades over a minute.
+
 ## 0.11.0b9
 
 - **Photo mode ramp**: photo mode now fades into its light over a set time, 20 s by default (Configure → Maintenance and photo modes → *Photo: ramp*, 0 = at once). Going back to the schedule afterwards stays at once.

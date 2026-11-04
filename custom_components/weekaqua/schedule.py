@@ -501,9 +501,9 @@ class WeekAquaScheduler:
         """Show the mode's light for its minutes, skipping schedule steps; then back to the schedule.
 
         settings: {"preset" (or CUSTOM_LEVELS with "levels"), "minutes", "filter_off", "co2_off",
-        "ramp" (photo mode: seconds to fade into its light)}
+        "ramp" (seconds to fade into its light)}
         """
-        from .const import CUSTOM_LEVELS, DEFAULT_PHOTO_RAMP
+        from .const import CUSTOM_LEVELS, DEFAULT_MODE_RAMP
 
         self._cancel_override_timer()
         preset, minutes = settings["preset"], settings["minutes"]
@@ -513,7 +513,7 @@ class WeekAquaScheduler:
         _LOGGER.info("%s mode: %s for %g min", mode.capitalize(), preset, minutes)
         self._notify()
         await self._hold_equipment(settings)
-        ramp = float(settings.get("ramp", DEFAULT_PHOTO_RAMP)) if mode == "photo" else 0.0
+        ramp = float(settings.get("ramp", DEFAULT_MODE_RAMP))
         if preset == CUSTOM_LEVELS and settings.get("levels"):
             await self.device.set_levels(tuple(settings["levels"]), ramp, source=t(f"src_{mode}"))
         elif preset in self.device.presets:
