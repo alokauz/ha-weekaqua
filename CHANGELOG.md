@@ -2,6 +2,10 @@
 
 Key changes in each version. Betas (e.g. 0.9.1b1) are pre-releases for testing.
 
+## 0.12.0b3
+
+- The YAML dashboard cards and their generators (`dashboard/` folder: the standard-cards card, the ApexCharts chart, their Russian versions and `make-*.jinja`) are removed: the **Week Aqua panel** replaces them. Cards you already added to a dashboard keep working (they're in your dashboard, not loaded from here), but they won't get updates.
+
 ## 0.12.0b2
 
 - **Week Aqua panel** now also appears in Firefox ("Custom element doesn't exist: weekaqua-panel"): the card loads before the frontend has started, and Firefox's element registry is replaced at that point, which dropped the card. It now defines itself again when that happens.

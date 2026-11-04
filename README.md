@@ -143,11 +143,9 @@ Each mode can also **switch the filter and CO₂ off** (choose the filter's swit
 
 Full-power hours are a *relative* measure for comparing days, schedules and acclimation weeks. They are not PAR or DLI, which would need a PAR meter.
 
-**Chart**: [`dashboard/weekaqua-chart.yaml`](dashboard/weekaqua-chart.yaml) draws the day's planned channels and power with a *now* line. It needs the **ApexCharts card** (HACS → search "apexcharts-card"). Add it like the main card (Manual card, paste).
+The **Week Aqua panel** card (below) draws today's planned channels and power with a *now* line.
 
-## Dashboard card
-
-### Week Aqua panel (recommended)
+## Dashboard card: Week Aqua panel
 
 The integration brings its own card, **Week Aqua panel**: the light and its connection, what's next and the day's timeline (with CO₂ and a siesta), the channels of the current step, Schedule / Photo / Maintenance tiles, acclimation progress with a full-power-hours chart and buttons to pause it or move it by days, today's light curve, Back to schedule, diagnostics, and a fold-out section with brightness, preset, channel and fan sliders. English and Russian, following your Home Assistant language.
 
@@ -161,11 +159,7 @@ type: custom:weekaqua-panel
 
 It finds its entities by itself, whatever their entity IDs are. It looks best full width: in a Sections view, set the card's width to full under **Layout**, or put it in a view of type **Panel (single card)**.
 
-### Standard cards
-
-[`dashboard/weekaqua-card.yaml`](dashboard/weekaqua-card.yaml) is a ready-made card using only Home Assistant's standard cards: the light with brightness and preset, the preset picker, Schedule / Maintenance / Photo / Acclimation switches, a **Today** summary (warnings when the light can't be reached, CO₂ isn't ready or a mode is on; what's happening now, the actual channel values, what's next, the day's timeline with CO₂, acclimation progress), a power gauge with a 24-hour graph, the channel sliders, and links to the integration's settings (**Configure**) and the light's device page.
-
-To add it with **your** entity IDs filled in: open **Developer tools → Template**, replace everything in the template editor with the contents of [`dashboard/make-card.jinja`](dashboard/make-card.jinja) (Russian: `make-card.ru.jinja`; chart: `make-chart.jinja` / `make-chart.ru.jinja`), and copy the result shown on the right. Then open your dashboard → ⋮ → **Edit dashboard** → **Add card** → **Manual** and paste it. The *Today* summary and the links find your entities by themselves either way.
+Prefer Home Assistant's standard cards? Everything the panel shows is also in the entities: e.g. a tile card for the light, the Schedule / Maintenance / Photo / Acclimation switches, and a markdown card with **Current step**, **Next step**, **Step channels** and **All steps** (its `timeline` attribute lists each step and CO₂ switch with its kind).
 
 ## Sunrise and sunset with automations
 
@@ -210,7 +204,7 @@ During a fade, entity states are updated every 30 s and at the end (not every st
 
 ## Languages
 
-English and Russian: menus, forms, list choices, entity names and everything the integration writes itself (sensor values, plans, notifications, errors) follow Home Assistant's language (**Settings → System → General → Language**). Log lines stay English. Russian dashboard cards: `dashboard/weekaqua-card.ru.yaml` and `dashboard/weekaqua-chart.ru.yaml`.
+English and Russian: menus, forms, list choices, entity names and everything the integration writes itself (sensor values, plans, notifications, errors) follow Home Assistant's language (**Settings → System → General → Language**). Log lines stay English. The **Week Aqua panel** card follows it too.
 
 ## Troubleshooting
 
